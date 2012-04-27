@@ -44,7 +44,7 @@
 void
 usage_install(void)
 {
-	fprintf(stderr, "usage: pkg install [-r reponame] [-yqfgxX] <pkg-name> <...>\n\n");
+	fprintf(stderr, "usage: pkg install [-r reponame] [-yqfFgxX] <pkg-name> <...>\n\n");
 	fprintf(stderr, "For more information see 'pkg help install'.\n");
 }
 
@@ -59,11 +59,12 @@ exec_install(int argc, char **argv)
 	int retcode = 1;
 	int ch;
 	bool yes = false;
+	bool ignore_already_installed = false;
 
 	match_t match = MATCH_EXACT;
 	bool force = false;
 
-	while ((ch = getopt(argc, argv, "yfgxXr:q")) != -1) {
+	while ((ch = getopt(argc, argv, "yfFgxXr:q")) != -1) {
 		switch (ch) {
 			case 'y':
 				yes = true;
@@ -82,6 +83,9 @@ exec_install(int argc, char **argv)
 				break;
 			case 'f':
 				force = true;
+				break;
+			case 'F':
+				ignore_already_installed = true;
 				break;
 			case 'q':
 				quiet = true;
@@ -112,7 +116,7 @@ exec_install(int argc, char **argv)
 		goto cleanup;
 	}
 
-	if ((it = pkgdb_query_installs(db, match, argc, argv, reponame, force)) == NULL)
+	if ((it = pkgdb_query_installs(db, match, argc, argv, reponame, force, ignore_already_installed)) == NULL)
 		goto cleanup;
 
 	while (pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC|PKG_LOAD_DEPS) == EPKG_OK) {
@@ -121,8 +125,11 @@ exec_install(int argc, char **argv)
 	}
 	pkgdb_it_free(it);
 
-	if (pkg_jobs_is_empty(jobs))
+	if (pkg_jobs_is_empty(jobs)) {
+		if (ignore_already_installed)
+			retcode = 0;
 		goto cleanup;
+	}
 
 	/* print a summary before applying the jobs */
 	pkg = NULL;
