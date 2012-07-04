@@ -3161,6 +3161,13 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 				snprintf(sql, BUFSIZ, "UPDATE packages SET locked=%d WHERE id=%"PRId64";", locked, id);
 				sql_exec(db->sqlite, sql);
 				break;
+			case PKG_SET_LOCKED:
+				locked = va_arg(ap, int);
+				if (locked != 0 && locked != 1)
+					continue;
+				snprintf(sql, BUFSIZ, "UPDATE packages SET locked=%d WHERE id=%"PRId64";", locked, id);
+				sql_exec(db->sqlite, sql);
+				break;
 			case PKG_SET_DEPORIGIN:
 				oldorigin = va_arg(ap, char *);
 				neworigin = va_arg(ap, char *);
