@@ -264,7 +264,7 @@ static struct db_upgrades {
 		"automatic, licenselogic, pkg_format_version "
 		"FROM oldpkgs;"
 	"DROP TABLE oldpkgs;"
-	}
+	},
 
 	/* Mark the end of the array */
 	{ -1, NULL },
