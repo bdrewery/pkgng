@@ -10,6 +10,7 @@ SRCS=		add.c \
 		event.c \
 		info.c \
 		install.c \
+		lock.c \
 		main.c \
 		progressmeter.c \
 		query.c \

@@ -84,6 +84,7 @@ struct pkg_dep {
 	struct sbuf *origin;
 	struct sbuf *name;
 	struct sbuf *version;
+	bool locked;
 	STAILQ_ENTRY(pkg_dep) next;
 };
 

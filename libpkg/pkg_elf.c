@@ -52,6 +52,7 @@ test_depends(struct pkgdb *db, struct pkg *pkg, const char *name)
 	struct pkg *d;
 	Link_map *map;
 	const char *deporigin, *depname, *depversion;
+	bool deplocked;
 	bool found;
 	void *handle;
 	bool shlibs = false;
@@ -95,7 +96,8 @@ test_depends(struct pkgdb *db, struct pkg *pkg, const char *name)
 	d = NULL;
 	if (pkgdb_it_next(it, &d, PKG_LOAD_BASIC) == EPKG_OK) {
 		found = false;
-		pkg_get(d, PKG_ORIGIN, &deporigin, PKG_NAME, &depname, PKG_VERSION, &depversion);
+		pkg_get(d, PKG_ORIGIN, &deporigin, PKG_NAME, &depname, PKG_VERSION, &depversion,
+			PKG_LOCKED, &deplocked);
 
 		dep = NULL;
 		found = false;
@@ -108,7 +110,7 @@ test_depends(struct pkgdb *db, struct pkg *pkg, const char *name)
 		if (!found) {
 			pkg_emit_error("adding forgotten depends (%s): %s-%s",
 					map->l_name, depname, depversion);
-			pkg_adddep(pkg, depname, deporigin, depversion);
+			pkg_adddep(pkg, depname, deporigin, depversion, deplocked);
 		}
 		pkg_free(d);
 	}

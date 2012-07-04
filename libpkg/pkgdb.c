@@ -991,7 +991,7 @@ pkgdb_query(struct pkgdb *db, const char *pattern, match_t match)
 			"SELECT id, origin, name, version, comment, desc, "
 				"message, arch, maintainer, www, "
 				"prefix, flatsize, licenselogic, automatic, "
-				"time, infos "
+				"locked, time, infos "
 			"FROM packages AS p%s "
 			"ORDER BY p.name;", comp);
 
@@ -1098,10 +1098,16 @@ pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg)
 	int ret = EPKG_OK;
 	char sql[BUFSIZ];
 	const char *reponame = NULL;
-	const char *basesql = ""
-			"SELECT d.name, d.origin, d.version "
-			"FROM %Q.deps AS d "
+	const char *mainsql = ""
+			"SELECT d.name, d.origin, d.version, p.locked "
+			"FROM main.deps AS d, "
+			     "main.packages AS p "
+			"WHERE d.package_id = ?1 AND p.origin = d.origin;";
+	const char *reposql = ""
+			"SELECT d.name, d.origin, d.version, 0 "
+			"FROM '%s'.deps AS d "
 			"WHERE d.package_id = ?1;";
+
 
 	assert(db != NULL && pkg != NULL);
 
@@ -1111,11 +1117,12 @@ pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg)
 	if (pkg->type == PKG_REMOTE) {
 		assert(db->type == PKGDB_REMOTE);
 		pkg_get(pkg, PKG_REPONAME, &reponame);
-		sqlite3_snprintf(sizeof(sql), sql, basesql, reponame);
+		snprintf(sql, sizeof(sql), reposql, reponame);
+		ret = sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL);
 	} else
-		sqlite3_snprintf(sizeof(sql), sql, basesql, "main");
+		ret = sqlite3_prepare_v2(db->sqlite, mainsql, -1, &stmt, NULL);
 
-	if (sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL) != SQLITE_OK) {
+	if (ret != SQLITE_OK) {
 		ERROR_SQLITE(db->sqlite);
 		return (EPKG_FATAL);
 	}
@@ -1124,7 +1131,7 @@ pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg)
 
 	while ((ret = sqlite3_step(stmt)) == SQLITE_ROW) {
 		pkg_adddep(pkg, sqlite3_column_text(stmt, 0), sqlite3_column_text(stmt, 1),
-				   sqlite3_column_text(stmt, 2));
+				sqlite3_column_text(stmt, 2), sqlite3_column_int(stmt, 3));
 	}
 	sqlite3_finalize(stmt);
 
@@ -1146,11 +1153,17 @@ pkgdb_load_rdeps(struct pkgdb *db, struct pkg *pkg)
 	const char *origin;
 	const char *reponame = NULL;
 	char sql[BUFSIZ];
-	const char *basesql = ""
-		"SELECT p.name, p.origin, p.version "
-		"FROM %Q.packages AS p, %Q.deps AS d "
+	const char *mainsql = ""
+		"SELECT p.name, p.origin, p.version, p.locked "
+		"FROM main.packages AS p, main.deps AS d "
 		"WHERE p.id = d.package_id "
 			"AND d.origin = ?1;";
+	const char *reposql = ""
+		"SELECT p.name, p.origin, p.version, 0 "
+		"FROM '%s'.packages AS p, '%s'.deps AS d "
+		"WHERE p.id = d.package_id "
+			"AND d.origin = ?1;";
+
 
 	assert(db != NULL && pkg != NULL);
 
@@ -1160,11 +1173,12 @@ pkgdb_load_rdeps(struct pkgdb *db, struct pkg *pkg)
 	if (pkg->type == PKG_REMOTE) {
 		assert(db->type == PKGDB_REMOTE);
 		pkg_get(pkg, PKG_REPONAME, &reponame);
-		sqlite3_snprintf(sizeof(sql), sql, basesql, reponame, reponame);
+		snprintf(sql, sizeof(sql), reposql, reponame, reponame);
+		ret = sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL);
 	} else
-		sqlite3_snprintf(sizeof(sql), sql, basesql, "main", "main");
+		ret = sqlite3_prepare_v2(db->sqlite, mainsql, -1, &stmt, NULL);
 
-	if (sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL) != SQLITE_OK) {
+	if (ret != SQLITE_OK) {
 		ERROR_SQLITE(db->sqlite);
 		return (EPKG_FATAL);
 	}
@@ -1174,7 +1188,7 @@ pkgdb_load_rdeps(struct pkgdb *db, struct pkg *pkg)
 
 	while ((ret = sqlite3_step(stmt)) == SQLITE_ROW) {
 		pkg_addrdep(pkg, sqlite3_column_text(stmt, 0), sqlite3_column_text(stmt, 1),
-				   sqlite3_column_text(stmt, 2));
+				sqlite3_column_text(stmt, 2), sqlite3_column_int(stmt, 3));
 	}
 	sqlite3_finalize(stmt);
 
@@ -3139,6 +3153,13 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 				}
 				sqlite3_bind_int64(stmt, 1, automatic);
 				sqlite3_bind_int64(stmt, 2, id);
+				break;
+			case PKG_SET_LOCKED:
+				locked = va_arg(ap, int);
+				if (locked != 0 && locked != 1)
+					continue;
+				snprintf(sql, BUFSIZ, "UPDATE packages SET locked=%d WHERE id=%"PRId64";", locked, id);
+				sql_exec(db->sqlite, sql);
 				break;
 			case PKG_SET_DEPORIGIN:
 				oldorigin = va_arg(ap, char *);
