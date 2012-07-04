@@ -1117,7 +1117,7 @@ pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg)
 	if (pkg->type == PKG_REMOTE) {
 		assert(db->type == PKGDB_REMOTE);
 		pkg_get(pkg, PKG_REPONAME, &reponame);
-		sqlite_snprintf(sizeof(sql), sql, reposql, reponame);
+		sqlite3_snprintf(sizeof(sql), sql, reposql, reponame);
 		ret = sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL);
 	} else
 		ret = sqlite3_prepare_v2(db->sqlite, mainsql, -1, &stmt, NULL);
