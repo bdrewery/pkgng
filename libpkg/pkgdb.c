@@ -50,7 +50,7 @@
 #include "private/utils.h"
 
 #include "private/db_upgrades.h"
-#define DBVERSION 12
+#define DBVERSION 13
 
 #define PKGGT	1<<1
 #define PKGLT	1<<2
@@ -455,6 +455,7 @@ pkgdb_init(sqlite3 *sdb)
 		"prefix TEXT NOT NULL,"
 		"flatsize INTEGER NOT NULL,"
 		"automatic INTEGER NOT NULL,"
+		"locked INTEGER NOT NULL DEFAULT 0,"
 		"licenselogic INTEGER NOT NULL,"
 		"infos TEXT, "
 		"time INTEGER, "
