@@ -3117,7 +3117,7 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 {
 	int attr;
 	sqlite3_stmt *stmt;
-	int64_t automatic, flatsize;
+	int64_t automatic, flatsize, locked;
 	char *oldorigin;
 	char *neworigin;
 
@@ -3125,6 +3125,7 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 	const char *sql[PKG_SET_ORIGIN + 1] = {
 		[PKG_SET_FLATSIZE]  = "UPDATE packages SET flatsize=?1 WHERE id=?2",
 		[PKG_SET_AUTOMATIC] = "UPDATE packages SET automatic=?1 WHERE id=?2",
+		[PKG_SET_LOCKED]    = "UPDATE packages SET locked=?1 WHERE id=?2".
 		[PKG_SET_DEPORIGIN] = "UPDATE deps SET origin=?1, "
 					"name=(SELECT name FROM packages WHERE origin=?1), "
 					"version=(SELECT version FROM packages WHERE origin=?1), "
@@ -3154,18 +3155,11 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 				sqlite3_bind_int64(stmt, 2, id);
 				break;
 			case PKG_SET_LOCKED:
-				locked = va_arg(ap, int);
+				locked = (int64_t)va_arg(ap, int);
 				if (locked != 0 && locked != 1)
 					continue;
-				snprintf(sql, BUFSIZ, "UPDATE packages SET locked=%d WHERE id=%"PRId64";", locked, id);
-				sql_exec(db->sqlite, sql);
-				break;
-			case PKG_SET_LOCKED:
-				locked = va_arg(ap, int);
-				if (locked != 0 && locked != 1)
-					continue;
-				snprintf(sql, BUFSIZ, "UPDATE packages SET locked=%d WHERE id=%"PRId64";", locked, id);
-				sql_exec(db->sqlite, sql);
+				sqlite3_bind_int64(stmt, 1, locked);
+				sqlite3_bind_int64(stmt, 2, id);
 				break;
 			case PKG_SET_DEPORIGIN:
 				oldorigin = va_arg(ap, char *);
