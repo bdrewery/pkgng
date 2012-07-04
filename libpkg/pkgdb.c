@@ -1105,7 +1105,7 @@ pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg)
 			"WHERE d.package_id = ?1 AND p.origin = d.origin;";
 	const char *reposql = ""
 			"SELECT d.name, d.origin, d.version, 0 "
-			"FROM '%s'.deps AS d "
+			"FROM %Q.deps AS d "
 			"WHERE d.package_id = ?1;";
 
 
@@ -1117,7 +1117,7 @@ pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg)
 	if (pkg->type == PKG_REMOTE) {
 		assert(db->type == PKGDB_REMOTE);
 		pkg_get(pkg, PKG_REPONAME, &reponame);
-		snprintf(sql, sizeof(sql), reposql, reponame);
+		sqlite_snprintf(sizeof(sql), sql, reposql, reponame);
 		ret = sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL);
 	} else
 		ret = sqlite3_prepare_v2(db->sqlite, mainsql, -1, &stmt, NULL);
@@ -1160,7 +1160,7 @@ pkgdb_load_rdeps(struct pkgdb *db, struct pkg *pkg)
 			"AND d.origin = ?1;";
 	const char *reposql = ""
 		"SELECT p.name, p.origin, p.version, 0 "
-		"FROM '%s'.packages AS p, '%s'.deps AS d "
+		"FROM %Q.packages AS p, %Q.deps AS d "
 		"WHERE p.id = d.package_id "
 			"AND d.origin = ?1;";
 
@@ -1173,7 +1173,7 @@ pkgdb_load_rdeps(struct pkgdb *db, struct pkg *pkg)
 	if (pkg->type == PKG_REMOTE) {
 		assert(db->type == PKGDB_REMOTE);
 		pkg_get(pkg, PKG_REPONAME, &reponame);
-		snprintf(sql, sizeof(sql), reposql, reponame, reponame);
+		sqlite3_snprintf(sizeof(sql), sql, reposql, reponame, reponame);
 		ret = sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL);
 	} else
 		ret = sqlite3_prepare_v2(db->sqlite, mainsql, -1, &stmt, NULL);
