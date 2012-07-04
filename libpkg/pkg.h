@@ -177,6 +177,7 @@ typedef enum {
 	PKG_NEW_PKGSIZE,
 	PKG_LICENSE_LOGIC,
 	PKG_AUTOMATIC,
+	PKG_LOCKED,
 	PKG_ROWID,
 	PKG_TIME,
 } pkg_attr;
