@@ -3119,7 +3119,7 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 	const char *sql[PKG_SET_ORIGIN + 1] = {
 		[PKG_SET_FLATSIZE]  = "UPDATE packages SET flatsize=?1 WHERE id=?2",
 		[PKG_SET_AUTOMATIC] = "UPDATE packages SET automatic=?1 WHERE id=?2",
-		[PKG_SET_LOCKED]    = "UPDATE packages SET locked=?1 WHERE id=?2".
+		[PKG_SET_LOCKED]    = "UPDATE packages SET locked=?1 WHERE id=?2",
 		[PKG_SET_DEPORIGIN] = "UPDATE deps SET origin=?1, "
 					"name=(SELECT name FROM packages WHERE origin=?1), "
 					"version=(SELECT version FROM packages WHERE origin=?1), "
