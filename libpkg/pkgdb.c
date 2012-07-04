@@ -1088,7 +1088,6 @@ pkgdb_is_dir_used(struct pkgdb *db, const char *dir, int64_t *res)
 
 	return (EPKG_OK);
 
-
 }
 
 int
@@ -1162,7 +1161,6 @@ pkgdb_load_rdeps(struct pkgdb *db, struct pkg *pkg)
 		"FROM %Q.packages AS p, %Q.deps AS d "
 		"WHERE p.id = d.package_id "
 			"AND d.origin = ?1;";
-
 
 	assert(db != NULL && pkg != NULL);
 
@@ -1725,7 +1723,6 @@ prstmt_finalize(struct pkgdb *db)
 	db->prstmt_initialized = false;
 	return;
 }
-
 
 int
 pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg, int complete)
@@ -2462,7 +2459,6 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 		sql_exec(db->sqlite, sbuf_get(sql));
 	} while (sqlite3_changes(db->sqlite) != 0);
 
-
 	/* Determine if there is an upgrade needed */
 	sql_exec(db->sqlite, "INSERT OR REPLACE INTO pkgjobs (pkgid, origin, name, version, comment, desc, message, arch, "
 			"maintainer, www, prefix, flatsize, newversion, newflatsize, pkgsize, "
@@ -2828,7 +2824,6 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, const char *r
 	return (pkgdb_it_new(db, stmt, PKG_REMOTE));
 }
 
-
 static int
 pkgdb_search_build_search_query(struct sbuf *sql, match_t match, unsigned int field)
 {
@@ -2885,7 +2880,6 @@ pkgdb_search(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 	assert(db != NULL);
 	assert(pattern != NULL && pattern[0] != '\0');
 	assert(db->type == PKGDB_REMOTE);
-
 
 	sql = sbuf_new_auto();
 	sbuf_cat(sql, basesql);
@@ -3180,7 +3174,7 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 			sqlite3_finalize(stmt);
 			return (EPKG_FATAL);
 		}
-		
+
 		sqlite3_finalize(stmt);
 	}
 	return (EPKG_OK);
@@ -3488,7 +3482,6 @@ pkgdb_stats(struct pkgdb *db, pkg_stats_t type)
 	while (sqlite3_step(stmt) != SQLITE_DONE) {
 		stats = sqlite3_column_int64(stmt, 0);
 	}
-
 
 	sbuf_finish(sql);
 	sbuf_free(sql);
