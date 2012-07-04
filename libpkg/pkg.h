@@ -184,6 +184,7 @@ typedef enum {
 typedef enum {
 	PKG_SET_FLATSIZE = 1,
 	PKG_SET_AUTOMATIC,
+	PKG_SET_LOCKED,
 	PKG_SET_DEPORIGIN,
 	PKG_SET_ORIGIN
 } pkg_set_attr;
@@ -485,9 +486,9 @@ int pkg_set_from_file(struct pkg *pkg, pkg_attr attr, const char *file);
  * @return An error code.
  */
 int pkg_adddep(struct pkg *pkg, const char *name, const char *origin, const
-			   char *version);
+			   char *version, bool locked);
 int pkg_addrdep(struct pkg *pkg, const char *name, const char *origin, const
-			   char *version);
+			   char *version, bool locked);
 
 //int pkg_addfile(struct pkg *, const char *fmt);
 /**
@@ -606,6 +607,8 @@ int pkg_emit_manifest(struct pkg *pkg, char **buf);
 
 /* pkg_dep */
 const char *pkg_dep_get(struct pkg_dep const * const , const pkg_dep_attr);
+
+bool pkg_dep_is_locked(struct pkg_dep const * const);
 
 /* pkg_file */
 const char *pkg_file_get(struct pkg_file const * const, const pkg_file_attr);

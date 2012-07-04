@@ -50,7 +50,7 @@ usage_info(void)
 {
 	fprintf(stderr, "usage: pkg info <pkg-name>\n");
 	fprintf(stderr, "       pkg info -a\n");
-	fprintf(stderr, "       pkg info [-eDgxXdrlBsqOf] <pkg-name>\n");
+	fprintf(stderr, "       pkg info [-eDgxXdrklBsqOf] <pkg-name>\n");
 	fprintf(stderr, "       pkg info [-drlBsqfR] -F <pkg-file>\n\n");
 	fprintf(stderr, "For more information see 'pkg help info'.\n");
 }
@@ -81,7 +81,7 @@ exec_info(int argc, char **argv)
 	int sign2 = 0;
 
 	/* TODO: exclusive opts ? */
-	while ((ch = getopt(argc, argv, "aDegxXEdrlBsqopOfF:R")) != -1) {
+	while ((ch = getopt(argc, argv, "aDegxXEdrklBsqopOfF:R")) != -1) {
 		switch (ch) {
 			case 'a':
 				match = MATCH_ALL;
@@ -113,6 +113,9 @@ exec_info(int argc, char **argv)
 			case 'r':
 				opt |= INFO_PRINT_RDEP;
 				query_flags |= PKG_LOAD_RDEPS;
+				break;
+			case 'k':
+				opt |= INFO_LOCKED;
 				break;
 			case 'l':
 				opt |= INFO_LIST_FILES;

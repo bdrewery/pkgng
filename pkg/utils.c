@@ -145,6 +145,7 @@ print_info(struct pkg * const pkg, unsigned int opt)
 	const char *maintainer, *www, *comment, *desc, *message;
 	int64_t flatsize, newflatsize, newpkgsize;
 	lic_t licenselogic;
+	bool locked;
 
 	pkg_config_bool(PKG_CONFIG_MULTIREPOS, &multirepos_enabled);
 
@@ -152,7 +153,8 @@ print_info(struct pkg * const pkg, unsigned int opt)
 	    PKG_ORIGIN, &origin, PKG_REPONAME, &reponame, PKG_REPOURL, &repourl,
 	    PKG_MAINTAINER, &maintainer, PKG_WWW, &www, PKG_COMMENT, &comment,
 	    PKG_DESC, &desc, PKG_FLATSIZE, &flatsize, PKG_NEW_FLATSIZE, &newflatsize,
-		PKG_NEW_PKGSIZE, &newpkgsize, PKG_LICENSE_LOGIC, &licenselogic, PKG_MESSAGE, &message);
+	    PKG_NEW_PKGSIZE, &newpkgsize, PKG_LICENSE_LOGIC, &licenselogic,
+	    PKG_MESSAGE, &message, PKG_LOCKED, &locked);
 
 	if (opt & INFO_RAW) {
 		pkg_emit_manifest(pkg, &m);
@@ -163,6 +165,7 @@ print_info(struct pkg * const pkg, unsigned int opt)
 		printf("%-15s: %s\n", "Version", version);
 		printf("%-15s: %s\n", "Origin", origin);
 		printf("%-15s: %s\n", "Prefix", prefix);
+		printf("%-15s: %s\n", "Locked", (locked ? "yes" : "no" ));
 
 		if ((pkg_type(pkg) == PKG_REMOTE) && multirepos_enabled)
 			printf("%-15s: %s [%s]\n", "Repository", reponame, repourl);
@@ -216,24 +219,44 @@ print_info(struct pkg * const pkg, unsigned int opt)
 		printf("%-15s: \n%s\n", "Description", desc);
 		printf("\n");
 	} else if (opt & INFO_PRINT_DEP) {
-		if (!(opt & INFO_QUIET))
-			printf("%s-%s depends on:\n", name, version);
-
+		if (!(opt & INFO_QUIET)) {
+			if ((opt & INFO_LOCKED) && locked) {
+				printf("%s-%s (*) depends on:\n", name, version);
+			} else {
+				printf("%s-%s depends on:\n", name, version);
+			}
+		}
                 while (pkg_deps(pkg, &dep) == EPKG_OK) {
-                        printf("%s-%s\n", pkg_dep_get(dep, PKG_DEP_NAME), pkg_dep_get(dep, PKG_DEP_VERSION));
+			if ((opt & INFO_LOCKED) && pkg_dep_is_locked(dep))
+				printf("%s-%s (*)\n", pkg_dep_get(dep, PKG_DEP_NAME),
+				       pkg_dep_get(dep, PKG_DEP_VERSION));
+			else
+				printf("%s-%s\n", pkg_dep_get(dep, PKG_DEP_NAME),
+				       pkg_dep_get(dep, PKG_DEP_VERSION));
                 }
 
                 if (!(opt & INFO_QUIET))
                         printf("\n");
+	} else if (opt & INFO_LOCKED) {
+		printf("%s-%s locked: %s\n", name, version, (locked ? "yes" : "no"));
 	} else if (opt & INFO_PRINT_MESSAGE) {
 		if (message)
 			printf("%s", message);
 	} else if (opt & INFO_PRINT_RDEP) {
-		if (!(opt & INFO_QUIET))
-			printf("%s-%s is required by:\n", name, version);
-
+		if (!(opt & INFO_QUIET)) {
+			if ((opt & INFO_LOCKED) && locked) {
+				printf("%s-%s  (*) is required by:\n", name, version);
+			} else {
+				printf("%s-%s is required by:\n", name, version);
+			}
+		}
                 while (pkg_rdeps(pkg, &dep) == EPKG_OK) {
-                        printf("%s-%s\n", pkg_dep_get(dep, PKG_DEP_NAME), pkg_dep_get(dep, PKG_DEP_VERSION));
+			if ((opt & INFO_LOCKED) && pkg_dep_is_locked(dep)) 
+				printf("%s-%s (*)\n", pkg_dep_get(dep, PKG_DEP_NAME),
+				       pkg_dep_get(dep, PKG_DEP_VERSION));
+			else
+				printf("%s-%s\n", pkg_dep_get(dep, PKG_DEP_NAME),
+				       pkg_dep_get(dep, PKG_DEP_VERSION));
                 }
 
                 if (!(opt & INFO_QUIET))

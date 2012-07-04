@@ -538,7 +538,7 @@ pkg_addgroup(struct pkg *pkg, const char *name)
 }
 
 int
-pkg_adddep(struct pkg *pkg, const char *name, const char *origin, const char *version)
+pkg_adddep(struct pkg *pkg, const char *name, const char *origin, const char *version, bool locked)
 {
 	struct pkg_dep *d = NULL;
 
@@ -559,6 +559,7 @@ pkg_adddep(struct pkg *pkg, const char *name, const char *origin, const char *ve
 	sbuf_set(&d->origin, origin);
 	sbuf_set(&d->name, name);
 	sbuf_set(&d->version, version);
+	d->locked = locked;
 
 	STAILQ_INSERT_TAIL(&pkg->deps, d, next);
 
@@ -566,7 +567,7 @@ pkg_adddep(struct pkg *pkg, const char *name, const char *origin, const char *ve
 }
 
 int
-pkg_addrdep(struct pkg *pkg, const char *name, const char *origin, const char *version)
+pkg_addrdep(struct pkg *pkg, const char *name, const char *origin, const char *version, bool locked)
 {
 	struct pkg_dep *d;
 
@@ -580,6 +581,7 @@ pkg_addrdep(struct pkg *pkg, const char *name, const char *origin, const char *v
 	sbuf_set(&d->origin, origin);
 	sbuf_set(&d->name, name);
 	sbuf_set(&d->version, version);
+	d->locked = locked;
 
 	STAILQ_INSERT_TAIL(&pkg->rdeps, d, next);
 

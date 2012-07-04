@@ -70,6 +70,11 @@ void usage_info(void);
 int exec_install(int, char **);
 void usage_install(void);
 
+/* pkg lock */
+int exec_lock(int, char **);
+int exec_unlock(int, char **);
+void usage_lock(void);
+
 /* pkg query */
 int exec_query(int, char **);
 void usage_query(void);
@@ -156,6 +161,7 @@ void usage_which(void);
 #define INFO_RAW (1<<10)
 #define INFO_LIST_SHLIBS (1<<11)
 #define INFO_PRINT_MESSAGE (1<<12)
+#define INFO_LOCKED (1<<13)
 
 bool query_yesno(const char *msg, ...);
 void print_info(struct pkg * const pkg, unsigned int opt);
