@@ -1108,7 +1108,6 @@ pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg)
 			"FROM %Q.deps AS d "
 			"WHERE d.package_id = ?1;";
 
-
 	assert(db != NULL && pkg != NULL);
 
 	if (pkg->flags & PKG_LOAD_DEPS)
