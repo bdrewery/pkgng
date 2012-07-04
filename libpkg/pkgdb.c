@@ -102,6 +102,7 @@ static struct column_mapping {
 	{ "pkgsize", PKG_NEW_PKGSIZE },
 	{ "licenselogic", PKG_LICENSE_LOGIC},
 	{ "automatic", PKG_AUTOMATIC},
+	{ "locked", PKG_LOCKED},
 	{ "time", PKG_TIME},
 	{ "infos", PKG_INFOS},
 	{ "rowid", PKG_ROWID},
