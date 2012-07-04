@@ -232,7 +232,7 @@ static struct db_upgrades {
 	"CREATE INDEX pkg_shlibs_package_id ON pkg_shlibs (package_id);"
 	"CREATE INDEX pkg_directories_directory_id ON pkg_directories (directory_id);"
 	},
-	{11,
+	{13,
 	"ALTER TABLE packages RENAME TO oldpkgs;"
 	"CREATE TABLE packages ("
 		"id INTEGER PRIMARY KEY,"
