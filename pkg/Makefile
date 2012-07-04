@@ -64,6 +64,7 @@ MAN=	pkg.8 \
 	pkg-fetch.8 \
 	pkg-info.8 \
 	pkg-install.8 \
+	pkg-lock.8 \
 	pkg-query.8 \
 	pkg-register.8 \
 	pkg-repo.8 \
@@ -81,6 +82,7 @@ MAN=	pkg.8 \
 	pkg.conf.5
 
 MLINKS=	pkg-delete.8 pkg-remove.8 \
+	pkg-lock.8 pkg-unlock.8 \
 	pkg.8 pkg-static.8
 
 .PHONY: fix-xrefs
