@@ -165,7 +165,9 @@ print_info(struct pkg * const pkg, unsigned int opt)
 		printf("%-15s: %s\n", "Version", version);
 		printf("%-15s: %s\n", "Origin", origin);
 		printf("%-15s: %s\n", "Prefix", prefix);
-		printf("%-15s: %s\n", "Locked", (locked ? "yes" : "no" ));
+		if (pkg_type(pkg) == PKG_INSTALLED)
+			printf("%-15s: %s\n", "Locked",
+			       (locked ? "yes" : "no" ));
 
 		if ((pkg_type(pkg) == PKG_REMOTE) && multirepos_enabled)
 			printf("%-15s: %s [%s]\n", "Repository", reponame, repourl);
