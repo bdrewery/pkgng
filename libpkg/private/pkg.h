@@ -58,6 +58,7 @@
 struct pkg {
 	struct sbuf * fields[PKG_NUM_FIELDS];
 	bool automatic;
+	bool locked;
 	int64_t flatsize;
 	int64_t new_flatsize;
 	int64_t new_pkgsize;

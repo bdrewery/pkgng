@@ -80,6 +80,7 @@ pkg_new(struct pkg **pkg, pkg_t type)
 	STAILQ_INIT(&(*pkg)->shlibs);
 
 	(*pkg)->automatic = false;
+	(*pkg)->locked = false;
 	(*pkg)->type = type;
 	(*pkg)->licenselogic = LICENSE_SINGLE;
 
@@ -105,6 +106,7 @@ pkg_reset(struct pkg *pkg, pkg_t type)
 	pkg->new_pkgsize = 0;
 	pkg->time = 0;
 	pkg->automatic = false;
+	pkg->locked = false;
 	pkg->licenselogic = LICENSE_SINGLE;
 
 	pkg_list_free(pkg, PKG_LICENSES);
@@ -206,6 +208,9 @@ pkg_vget(struct pkg const *const pkg, va_list ap)
 			case PKG_AUTOMATIC:
 				*va_arg(ap, bool *) = pkg->automatic;
 				break;
+			case PKG_LOCKED:
+				*va_arg(ap, bool *) = pkg->locked;
+				break;
 			case PKG_TIME:
 				*va_arg(ap, int64_t *) = pkg->time;
 				break;
@@ -275,6 +280,9 @@ pkg_vset(struct pkg *pkg, va_list ap)
 		switch (attr) {
 			case PKG_AUTOMATIC:
 				pkg->automatic = (int)va_arg(ap, int64_t);
+				break;
+			case PKG_LOCKED:
+				pkg->locked = (int)va_arg(ap, int64_t);
 				break;
 			case PKG_LICENSE_LOGIC:
 				pkg->licenselogic = (lic_t)va_arg(ap, int64_t);
