@@ -79,6 +79,8 @@ exec_info(int argc, char **argv)
 	int i, j;
 	int sign = 0;
 	int sign2 = 0;
+	bool pkg_exists = false;
+	bool origin_search = false;
 
 	/* TODO: exclusive opts ? */
 	while ((ch = getopt(argc, argv, "aDegxXEdrlBsqopOfF:R")) != -1) {
@@ -87,10 +89,10 @@ exec_info(int argc, char **argv)
 				match = MATCH_ALL;
 				break;
 			case 'O':
-				opt |= INFO_ORIGIN_SEARCH;  /* this is only for ports compat */
+				origin_search = true;  /* this is only for ports compat */
 				break;
 			case 'e':
-				opt |= INFO_EXISTS;
+				pkg_exists = true;;
 				retcode = 1;
 				break;
 			case 'g':
@@ -103,31 +105,31 @@ exec_info(int argc, char **argv)
 				match = MATCH_EREGEX;
 				break;
 			case 'D':
-				opt |= INFO_PRINT_MESSAGE;
+				opt |= INFO_MESSAGE;
 				query_flags |= PKG_LOAD_BASIC;
 				break;
 			case 'd':
-				opt |= INFO_PRINT_DEP;
+				opt |= INFO_DEPS;
 				query_flags |= PKG_LOAD_DEPS;
 				break;
 			case 'r':
-				opt |= INFO_PRINT_RDEP;
+				opt |= INFO_RDEPS;
 				query_flags |= PKG_LOAD_RDEPS;
 				break;
 			case 'l':
-				opt |= INFO_LIST_FILES;
+				opt |= INFO_FILES;
 				query_flags |= PKG_LOAD_FILES;
 				break;
 			case 'B':
-				opt |= INFO_LIST_SHLIBS;
+				opt |= INFO_SHLIBS;
 				query_flags |= PKG_LOAD_SHLIBS;
 				break;
 			case 's':
-				opt |= INFO_SIZE;
+				opt |= INFO_FLATSIZE;
 				break;
 			case 'E': /* ports compatibility */
 			case 'q':
-				opt |= INFO_QUIET;
+				quiet = true;
 				break;
 			case 'o':
 				opt |= INFO_ORIGIN;
@@ -160,7 +162,7 @@ exec_info(int argc, char **argv)
 
 	if (argc == 0 && file == NULL && match != MATCH_ALL) {
 		/* which -O bsd.*.mk always execpt clean output */
-		if (opt & INFO_ORIGIN_SEARCH)
+		if (origin_search)
 			return (EX_OK);
 		usage_info();
 		return (EX_USAGE);
@@ -183,7 +185,7 @@ exec_info(int argc, char **argv)
 		if (match == MATCH_ALL)
 			return (EX_OK);
 
-		if ((opt & INFO_QUIET) == 0)
+		if (!quiet)
 			printf("No packages installed.\n");
 
 		return (EX_UNAVAILABLE);
@@ -293,7 +295,7 @@ exec_info(int argc, char **argv)
 
 		/* ports infrastructure expects pkg info -q -O to always return 0 even
 		 * if the ports doesn't exists */
-		if (opt & INFO_ORIGIN_SEARCH)
+		if (origin_search)
 			gotone = true;
 
 		/* end of compatibility hacks */
@@ -347,7 +349,7 @@ exec_info(int argc, char **argv)
 						break;
 				}
 			}
-			if (opt & INFO_EXISTS)
+			if (pkg_exists)
 				retcode = EX_OK;
 			else
 				print_info(pkg, opt);
@@ -357,7 +359,7 @@ exec_info(int argc, char **argv)
 		}
 
 		if (retcode == EX_OK && !gotone && match != MATCH_ALL) {
-			if ((opt & INFO_QUIET) == 0)
+			if (!quiet)
 				warnx("No package(s) matching %s", argv[i]);
 			retcode = EX_SOFTWARE;
 		}

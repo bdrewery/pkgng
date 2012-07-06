@@ -53,57 +53,148 @@ exec_search(int argc, char **argv)
 	int flags = PKG_LOAD_BASIC;
 	unsigned int opt = 0;
 	match_t match = MATCH_REGEX;
-	pkgdb_field field = FIELD_NAME;
+	pkgdb_field search = FIELD_NONE;
+	pkgdb_field output = FIELD_NONE;
 	struct pkgdb *db = NULL;
 	struct pkgdb_it *it = NULL;
 	struct pkg *pkg = NULL;
 	bool atleastone = false;
 
-	while ((ch = getopt(argc, argv, "gxXcdr:fDsqop")) != -1) {
+	while ((ch = getopt(argc, argv, "gxXcdr:S:O:M:fDsqop")) != -1) {
 		switch (ch) {
-			case 'e':
-				match = MATCH_EXACT;
-				break;
-			case 'g':
-				match = MATCH_GLOB;
-				break;
-			case 'x':
-				match = MATCH_REGEX;
-				break;
-			case 'X':
-				match = MATCH_EREGEX;
-				break;
-			case 'c':
-				field = FIELD_COMMENT;
-				break;
-			case 'd':
-				field = FIELD_DESC;
-				break;
-			case 'r':
-				reponame = optarg;
-			case 'f':
-				opt |= INFO_FULL;
-				flags |= PKG_LOAD_CATEGORIES|PKG_LOAD_LICENSES|PKG_LOAD_OPTIONS|PKG_LOAD_SHLIBS;
-				break;
-			case 'D':
-				opt |= INFO_PRINT_DEP;
-				flags |= PKG_LOAD_DEPS;
-				break;
-			case 's':
-				opt |= INFO_SIZE;
-				break;
-			case 'q':
-				opt |= INFO_QUIET;
-				break;
+		case 'e':
+			match = MATCH_EXACT;
+			break;
+		case 'g':
+			match = MATCH_GLOB;
+			break;
+		case 'x':
+			match = MATCH_REGEX;
+			break;
+		case 'X':
+			match = MATCH_EREGEX;
+			break;
+		case 'S':
+			/* search options */
+			switch(optarg[0]) {
 			case 'o':
-				opt |= INFO_ORIGIN;
+				search = FIELD_ORIGIN;
+				break;
+			case 'n':
+				search = FIELD_NAME;
 				break;
 			case 'p':
+				search = FIELD_NAMEVER;
+				break;
+			case 'c':
+			opt_S_c:
+				search = FIELD_COMMENT;
+				break;
+			case 'd':
+			opt_S_d:
+				search = FIELD_DESC;
+				break;
+			default:
+				usage_search();
+				return (EX_USAGE);
+			}
+			break;
+		case 'O':
+			/* output options */
+			switch(optarg[0]) {
+			case 'o':
+			opt_O_o:
+				output = FIELD_ORIGIN;
+				break;
+			case 'n':
+				output = FIELD_NAME;
+				break;
+			case 'p':
+				output = FIELD_NAMEVER;
+				break;
+			case 'c':
+				output = FIELD_COMMENT;
+				break;
+			case 'd':
+				output = FIELD_DESC;
+				break;
+			default:
+				usage_search();
+				return (EX_USAGE);
+			}
+			break;
+		case 'M':
+			/* output modifiers */
+			switch(optarg[0]) {
+			case 'f':
+			opt_M_f:
+				opt |= INFO_FULL;
+				flags |= PKG_LOAD_CATEGORIES|
+					PKG_LOAD_LICENSES|
+					PKG_LOAD_OPTIONS|
+					PKG_LOAD_SHLIBS;
+				break;
+			case 'd':
+			opt_M_d:
+				opt |= INFO_DEPS;
+				flags |= PKG_LOAD_DEPS;
+				break;
+			case 'r':
+				opt |= INFO_RDEPS;
+				flags |= PKG_LOAD_RDEPS;
+				break;
+			case 'R':
+				opt |= INFO_RAW;
+				flags |= PKG_LOAD_FILES|
+					PKG_LOAD_DIRS|
+					PKG_LOAD_CATEGORIES|
+					PKG_LOAD_LICENSES|
+					PKG_LOAD_OPTIONS|
+					PKG_LOAD_SCRIPTS|
+					PKG_LOAD_USERS|
+					PKG_LOAD_GROUPS|
+					PKG_LOAD_DEPS|
+					PKG_LOAD_SHLIBS;
+				break;
+			case 's':
+			opt_M_s:
+				opt |= INFO_FLATSIZE;
+				break;
+			case 'q':
+			opt_M_q:
+				quiet = true;
+				break;
+			case 'p':
+			opt_M_p:
 				opt |= INFO_PREFIX;
 				break;
 			default:
 				usage_search();
 				return (EX_USAGE);
+			}
+			break;
+		case 'r':
+			reponame = optarg;
+			break;
+		case 'c':	/* Same as -Sc */
+			goto opt_S_c;
+		case 'd':	/* Same as -Sd */
+			goto opt_S_d;
+		case 'f':	/* Same as -Mf */
+			goto opt_M_f;
+		case 'D':	/* Same as -MD */
+			goto opt_M_d;
+		case 's':	/* Same as -Ms */
+			goto opt_M_s;
+		case 'q':	/* Same as -Mq */
+			goto opt_M_q;
+		case 'o':	/* Same as -Oo */
+			goto opt_O_o;
+		case 'p':	/* Same as -Mp */
+			goto opt_M_p;
+		default:
+			usage_search();
+			return (EX_USAGE);
 		}
 	}
 
@@ -120,13 +211,39 @@ exec_search(int argc, char **argv)
 		fprintf(stderr, "Pattern must not be empty!\n");
 		return (EX_USAGE);
 	}
-	if (strchr(pattern, '/') != NULL)
-		field = FIELD_ORIGIN;
+	if (search == FIELD_NONE) {
+		if (strchr(pattern, '/') != NULL)
+			search = FIELD_ORIGIN;
+		else
+			search = FIELD_NAMEVER; /* Default search */
+	}
+	if (output == FIELD_NONE)
+		output = search; /* By default, show what was searched  */
+
+	switch(output) {
+	case FIELD_NONE:
+		break;		/* should never happen */
+	case FIELD_ORIGIN:
+		opt |= INFO_TAG_ORIGIN;
+		break;
+	case FIELD_NAME:
+		opt |= INFO_TAG_NAME;
+		break;
+	case FIELD_NAMEVER:
+		opt |= INFO_TAG_NAMEVER;
+		break;
+	case FIELD_COMMENT:
+		opt |= INFO_TAG_NAMEVER|INFO_COMMENT;
+		break;
+	case FIELD_DESC:
+		opt |= INFO_TAG_NAMEVER|INFO_DESCR;
+		break;
+	}
 
 	if (pkgdb_open(&db, PKGDB_REMOTE) != EPKG_OK)
 		return (EX_IOERR);
 
-	if ((it = pkgdb_search(db, pattern, match, field, reponame)) == NULL) {
+	if ((it = pkgdb_search(db, pattern, match, search, reponame)) == NULL) {
 		pkgdb_close(db);
 		return (EX_IOERR);
 	}
