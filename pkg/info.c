@@ -67,7 +67,7 @@ exec_info(int argc, char **argv)
 	struct pkgdb_it *it = NULL;
 	int query_flags = PKG_LOAD_BASIC;
 	struct pkg *pkg = NULL;
-	unsigned int opt = 0;
+	unsigned int opt = INFO_TAG_NAMEVER;
 	match_t match = MATCH_EXACT;
 	char *pkgname;
 	char *pkgversion = NULL, *pkgversion2 = NULL;
@@ -138,7 +138,7 @@ exec_info(int argc, char **argv)
 				opt |= INFO_PREFIX;
 				break;
 			case 'f':
-				opt |= INFO_FULL;
+				opt = INFO_FULL; /* Overrides all other choices */
 				query_flags |= PKG_LOAD_CATEGORIES|PKG_LOAD_LICENSES|PKG_LOAD_OPTIONS;
 				break;
 			case 'F':
@@ -167,6 +167,10 @@ exec_info(int argc, char **argv)
 		usage_info();
 		return (EX_USAGE);
 	}
+
+	/* When no other data is requested, default is to print 'name-ver comment' */
+	if ((opt & INFO_ALL) == 0) 
+		opt |= INFO_COMMENT;
 
 	if (file != NULL) {
 		if (pkg_open(&pkg, file, NULL) != EPKG_OK) {
