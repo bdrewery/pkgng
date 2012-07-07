@@ -382,8 +382,8 @@ print_info(struct pkg * const pkg, unsigned int options)
 					printf("%-15s:\n", "Depends on");
 				while (pkg_deps(pkg, &dep) == EPKG_OK)
 					printf("\t%s-%s\n",
-					       pkg_dep_get(dep,	PKG_DEP_NAME),
-					       pkg_dep_get(dep, PKG_DEP_VERSION));
+					       pkg_dep_name(dep),
+					       pkg_dep_version(dep));
 			}
 			break;
 		case INFO_RDEPS:
@@ -392,8 +392,8 @@ print_info(struct pkg * const pkg, unsigned int options)
 					printf("%-15s:\n", "Required by");
 				while (pkg_rdeps(pkg, &dep) == EPKG_OK)
 					printf("\t%s-%s\n",
-					       pkg_dep_get(dep,	PKG_DEP_NAME),
-					       pkg_dep_get(dep, PKG_DEP_VERSION));
+					       pkg_dep_name(dep),
+					       pkg_dep_version(dep));
 			}
 			break;
 		case INFO_FILES: /* Installed pkgs only */
@@ -403,8 +403,7 @@ print_info(struct pkg * const pkg, unsigned int options)
 					printf("%-15s:\n", "Files");
 				while (pkg_files(pkg, &file) == EPKG_OK)
 					printf("\t%s\n",
-					       pkg_file_get(file,
-							    PKG_FILE_PATH));
+					       pkg_file_path(file));
 			}
 			break;
 		case INFO_DIRS:	/* Installed pkgs only */
