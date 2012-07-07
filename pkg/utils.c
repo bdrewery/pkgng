@@ -180,15 +180,19 @@ print_info(struct pkg * const pkg, unsigned int options)
 		return;
 	}
 
-	/* Print a tag-line identifying the package -- either NAMEVER, ORIGIN
-	   or NAME (in that order of preference).  This may be the only
-	   output from this function */
-	if (options & INFO_TAG_NAMEVER)
-		cout = printf("%s-%s", name, version);
-	else if (options & INFO_TAG_ORIGIN)
-		cout = printf("%s", origin);
-	else if (options & INFO_TAG_NAME)
-		cout = printf("%s", name);
+	if (!quiet) {
+		/* Print a tag-line identifying the package -- either
+		   NAMEVER, ORIGIN or NAME (in that order of
+		   preference).  This may be the only output from this
+		   function */
+
+		if (options & INFO_TAG_NAMEVER)
+			cout = printf("%s-%s", name, version);
+		else if (options & INFO_TAG_ORIGIN)
+			cout = printf("%s", origin);
+		else if (options & INFO_TAG_NAME)
+			cout = printf("%s", name);
+	}
 
 	/* If we printed a tag, and there are no other items to print,
 	   then just return now. If there's only one single-line item
@@ -226,19 +230,22 @@ print_info(struct pkg * const pkg, unsigned int options)
 	    (options & INFO_ALL) == INFO_GROUPS) {
 		/* Only one item to print */
 		print_tag = false;
-		if (options & INFO_MULTILINE)
-			printf(":\n");
-		else {
-			if (cout < 30)
-				cout = 30 - cout;
-			else
-				cout = 1;
-			printf("%*s", cout, " ");
+		if (!quiet) {
+			if (options & INFO_MULTILINE)
+				printf(":\n");
+			else {
+				if (cout < 30)
+					cout = 30 - cout;
+				else
+					cout = 1;
+				printf("%*s", cout, " ");
+			}
 		}
 	} else {
 		/* Several items to print */
-		printf("\n");
 		print_tag = true;
+		if (!quiet)
+			printf("\n");
 	}
 
 	for (opt = 0x1; opt <= INFO_LASTFIELD; opt <<= 1) {

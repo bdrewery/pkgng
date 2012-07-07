@@ -38,9 +38,11 @@
 void
 usage_search(void)
 {
-	fprintf(stderr, "usage: pkg search [-r reponame] <pkg-name>\n");
-	fprintf(stderr, "       pkg search [-r reponame] [-fDsqop] <pkg-name>\n");
-	fprintf(stderr, "       pkg search [-r reponame] [-egxXcdfDsqop] <pattern>\n\n");
+	fprintf(stderr, "usage: pkg search [-r repo] [-egxX] [search] [output] [modifier]... <pkg-name>\n");
+	fprintf(stderr, "       pkg search [-r repo] [-egxX] [-qcdfDsop] <pattern>\n");
+	fprintf(stderr, "       Search options: -So -Sn -Sp -Sc -Sd\n");
+	fprintf(stderr, "       Output options: -Oo -On -Op -Oc -Od\n");
+	fprintf(stderr, "       Modifiers: -Mf -Md -Mr -Ms -MS -MR\n");
 	fprintf(stderr, "For more information see 'pkg help search'.\n");
 }
 
@@ -60,7 +62,7 @@ exec_search(int argc, char **argv)
 	struct pkg *pkg = NULL;
 	bool atleastone = false;
 
-	while ((ch = getopt(argc, argv, "gxXcdr:S:O:M:fDsqop")) != -1) {
+	while ((ch = getopt(argc, argv, "egxXr:S:O:M:cdfDsopq")) != -1) {
 		switch (ch) {
 		case 'e':
 			match = MATCH_EXACT;
@@ -73,6 +75,9 @@ exec_search(int argc, char **argv)
 			break;
 		case 'X':
 			match = MATCH_EREGEX;
+			break;
+		case 'r':
+			reponame = optarg;
 			break;
 		case 'S':
 			/* search options */
@@ -147,21 +152,19 @@ exec_search(int argc, char **argv)
 			opt_M_s:
 				opt |= INFO_FLATSIZE;
 				break;
-			case 'q':
-			opt_M_q:
-				quiet = true;
-				break;
+			case 'S':
+				opt |= INFO_PKGSIZE;
 			case 'p':
 			opt_M_p:
 				opt |= INFO_PREFIX;
+				break;
+			case 'R':
+				opt |= INFO_REPOSITORY;
 				break;
 			default:
 				usage_search();
 				return (EX_USAGE);
 			}
-			break;
-		case 'r':
-			reponame = optarg;
 			break;
 		case 'c':	/* Same as -Sc */
 			goto opt_S_c;
@@ -173,12 +176,13 @@ exec_search(int argc, char **argv)
 			goto opt_M_d;
 		case 's':	/* Same as -Ms */
 			goto opt_M_s;
-		case 'q':	/* Same as -Mq */
-			goto opt_M_q;
 		case 'o':	/* Same as -Oo */
 			goto opt_O_o;
 		case 'p':	/* Same as -Mp */
 			goto opt_M_p;
+		case 'q':
+			quiet = true;
+			break;
 		default:
 			usage_search();
 			return (EX_USAGE);
