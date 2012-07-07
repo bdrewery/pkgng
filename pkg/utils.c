@@ -230,8 +230,8 @@ print_info(struct pkg * const pkg, unsigned int opt)
 		}
                 while (pkg_deps(pkg, &dep) == EPKG_OK) {
 			if ((opt & INFO_LOCKED) && pkg_dep_is_locked(dep))
-				printf("%s-%s (*)\n", pkg_dep_get(dep, PKG_DEP_NAME),
-				       pkg_dep_get(dep, PKG_DEP_VERSION));
+				printf("%s-%s (*)\n", pkg_dep_name(dep),
+				       pkg_dep_version(dep));
 			else
 				printf("%s-%s\n", pkg_dep_get(dep, PKG_DEP_NAME),
 				       pkg_dep_get(dep, PKG_DEP_VERSION));
@@ -254,11 +254,11 @@ print_info(struct pkg * const pkg, unsigned int opt)
 		}
                 while (pkg_rdeps(pkg, &dep) == EPKG_OK) {
 			if ((opt & INFO_LOCKED) && pkg_dep_is_locked(dep)) 
-				printf("%s-%s (*)\n", pkg_dep_get(dep, PKG_DEP_NAME),
-				       pkg_dep_get(dep, PKG_DEP_VERSION));
+				printf("%s-%s (*)\n", pkg_dep_name(dep),
+				       pkg_dep_version(dep);
 			else
-				printf("%s-%s\n", pkg_dep_get(dep, PKG_DEP_NAME),
-				       pkg_dep_get(dep, PKG_DEP_VERSION));
+				printf("%s-%s\n", pkg_dep_name(dep),
+				       pkg_dep_version(dep));
                 }
 
                 if (!(opt & INFO_QUIET))
@@ -268,7 +268,7 @@ print_info(struct pkg * const pkg, unsigned int opt)
 			printf("%s-%s owns the following files:\n", name, version);
 
                 while (pkg_files(pkg, &file) == EPKG_OK) {
-                        printf("%s\n", pkg_file_get(file, PKG_FILE_PATH));
+                        printf("%s\n", pkg_file_path(file));
                 }
 
                 if (!(opt & INFO_QUIET))
