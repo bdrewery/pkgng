@@ -255,7 +255,7 @@ print_info(struct pkg * const pkg, unsigned int opt)
                 while (pkg_rdeps(pkg, &dep) == EPKG_OK) {
 			if ((opt & INFO_LOCKED) && pkg_dep_is_locked(dep)) 
 				printf("%s-%s (*)\n", pkg_dep_name(dep),
-				       pkg_dep_version(dep);
+				       pkg_dep_version(dep));
 			else
 				printf("%s-%s\n", pkg_dep_name(dep),
 				       pkg_dep_version(dep));
