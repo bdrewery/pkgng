@@ -169,10 +169,12 @@ print_info(struct pkg * const pkg, unsigned int options)
 		PKG_LICENSE_LOGIC, &licenselogic,
 		PKG_MESSAGE,       &message);
 
-	if (options & INFO_RAW) {
-		pkg_emit_manifest(pkg, &m);
-		printf("%s\n", m);
-		free(m);
+	if (options & INFO_RAW) { /* Not for remote packages */
+		if (pkg_type(pkg) != PKG_REMOTE) {
+			pkg_emit_manifest(pkg, &m);
+			printf("%s\n", m);
+			free(m);
+		}
 		return;
 	}
 

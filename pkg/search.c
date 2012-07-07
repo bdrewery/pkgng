@@ -143,19 +143,6 @@ exec_search(int argc, char **argv)
 				opt |= INFO_RDEPS;
 				flags |= PKG_LOAD_RDEPS;
 				break;
-			case 'R':
-				opt |= INFO_RAW;
-				flags |= PKG_LOAD_FILES|
-					PKG_LOAD_DIRS|
-					PKG_LOAD_CATEGORIES|
-					PKG_LOAD_LICENSES|
-					PKG_LOAD_OPTIONS|
-					PKG_LOAD_SCRIPTS|
-					PKG_LOAD_USERS|
-					PKG_LOAD_GROUPS|
-					PKG_LOAD_DEPS|
-					PKG_LOAD_SHLIBS;
-				break;
 			case 's':
 			opt_M_s:
 				opt |= INFO_FLATSIZE;
