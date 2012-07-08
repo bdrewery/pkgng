@@ -50,8 +50,8 @@ usage_info(void)
 {
 	fprintf(stderr, "usage: pkg info <pkg-name>\n");
 	fprintf(stderr, "       pkg info -a\n");
-	fprintf(stderr, "       pkg info [-eDgxXdrlBsqOf] <pkg-name>\n");
-	fprintf(stderr, "       pkg info [-drlBsqfR] -F <pkg-file>\n\n");
+	fprintf(stderr, "       pkg info [-egxXIdrlBsqOf] <pkg-name>\n");
+	fprintf(stderr, "       pkg info [-IdrlBsqfR] -F <pkg-file>\n\n");
 	fprintf(stderr, "For more information see 'pkg help info'.\n");
 }
 
@@ -83,7 +83,7 @@ exec_info(int argc, char **argv)
 	bool origin_search = false;
 
 	/* TODO: exclusive opts ? */
-	while ((ch = getopt(argc, argv, "aDegxXEdrlBsqopOfF:R")) != -1) {
+	while ((ch = getopt(argc, argv, "aDegxXEIdrlBsqopOfF:R")) != -1) {
 		switch (ch) {
 			case 'a':
 				match = MATCH_ALL;
@@ -112,6 +112,9 @@ exec_info(int argc, char **argv)
 				opt |= INFO_DEPS;
 				query_flags |= PKG_LOAD_DEPS;
 				break;
+			case 'I':
+				opt |= INFO_COMMENT;
+				break;
 			case 'r':
 				opt |= INFO_RDEPS;
 				query_flags |= PKG_LOAD_RDEPS;
@@ -138,15 +141,26 @@ exec_info(int argc, char **argv)
 				opt |= INFO_PREFIX;
 				break;
 			case 'f':
-				opt = INFO_FULL; /* Overrides all other choices */
-				query_flags |= PKG_LOAD_CATEGORIES|PKG_LOAD_LICENSES|PKG_LOAD_OPTIONS;
+				opt |= INFO_FULL;
+				query_flags |= PKG_LOAD_CATEGORIES |
+					PKG_LOAD_LICENSES	   |
+					PKG_LOAD_OPTIONS;
 				break;
 			case 'F':
 				file = optarg;
 				break;
 			case 'R':
 				opt |= INFO_RAW;
-				query_flags |= PKG_LOAD_FILES|PKG_LOAD_DIRS|PKG_LOAD_CATEGORIES|PKG_LOAD_LICENSES|PKG_LOAD_OPTIONS|PKG_LOAD_SCRIPTS|PKG_LOAD_USERS|PKG_LOAD_GROUPS|PKG_LOAD_DEPS|PKG_LOAD_SHLIBS;
+				query_flags |= PKG_LOAD_FILES |
+					PKG_LOAD_DIRS	      |
+					PKG_LOAD_CATEGORIES   |
+					PKG_LOAD_LICENSES     |
+					PKG_LOAD_OPTIONS      |
+					PKG_LOAD_SCRIPTS      |
+					PKG_LOAD_USERS	      |
+					PKG_LOAD_GROUPS	      |
+					PKG_LOAD_DEPS	      |
+					PKG_LOAD_SHLIBS;
 				break;
 			default:
 				usage_info();
@@ -168,9 +182,20 @@ exec_info(int argc, char **argv)
 		return (EX_USAGE);
 	}
 
-	/* When no other data is requested, default is to print 'name-ver comment' */
-	if ((opt & INFO_ALL) == 0) 
+	/* When no other data is requested, default is to print
+	 * 'name-ver comment' For -O, just print name-ver */
+	if (!origin_search && (opt & INFO_ALL) == 0 && match == MATCH_ALL) 
 		opt |= INFO_COMMENT;
+
+	/* Special compatibility: handle -O and -q -O */
+	if (origin_search) {
+		if (quiet) {
+			opt = INFO_TAG_NAMEVER;
+			quiet = false;
+		} else {
+			opt = INFO_TAG_NAMEVER|INFO_COMMENT;
+		}
+	}
 
 	if (file != NULL) {
 		if (pkg_open(&pkg, file, NULL) != EPKG_OK) {
