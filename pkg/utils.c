@@ -150,7 +150,7 @@ print_info(struct pkg * const pkg, unsigned int options)
 	unsigned opt;
 	int64_t flatsize, newflatsize, newpkgsize;
 	lic_t licenselogic;
-	int cout = -1;
+	int cout = 0;		/* Number of characters output */
 
 	pkg_config_bool(PKG_CONFIG_MULTIREPOS, &multirepos_enabled);
 
@@ -196,7 +196,7 @@ print_info(struct pkg * const pkg, unsigned int options)
 
 	/* If we printed a tag, and there are no other items to print,
 	   then just return now. If there's only one single-line item
-	   to print, show it at column 30 on the same line. If there's
+	   to print, show it at column 32 on the same line. If there's
 	   one multi-line item to print, start a new line. If there is
 	   more than one item to print per pkg, use 'key : value'
 	   style to show on a new line.  */
@@ -234,8 +234,8 @@ print_info(struct pkg * const pkg, unsigned int options)
 			if (options & INFO_MULTILINE)
 				printf(":\n");
 			else {
-				if (cout < 30)
-					cout = 30 - cout;
+				if (cout < 31)
+					cout = 31 - cout;
 				else
 					cout = 1;
 				printf("%*s", cout, " ");
