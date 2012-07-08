@@ -62,7 +62,7 @@ exec_search(int argc, char **argv)
 	struct pkg *pkg = NULL;
 	bool atleastone = false;
 
-	while ((ch = getopt(argc, argv, "egxXr:S:O:M:cdfDsopq")) != -1) {
+	while ((ch = getopt(argc, argv, "egxXr:S:L:M:cdfDsopq")) != -1) {
 		switch (ch) {
 		case 'e':
 			match = MATCH_EXACT;
@@ -108,7 +108,7 @@ exec_search(int argc, char **argv)
 			/* label options */
 			switch(optarg[0]) {
 			case 'o':
-			opt_O_o:
+			opt_L_o:
 				label = FIELD_ORIGIN;
 				break;
 			case 'n':
@@ -180,8 +180,8 @@ exec_search(int argc, char **argv)
 			goto opt_M_d;
 		case 's':	/* Same as -Ms */
 			goto opt_M_s;
-		case 'o':	/* Same as -Oo */
-			goto opt_O_o;
+		case 'o':	/* Same as -Lo */
+			goto opt_L_o;
 		case 'p':	/* Same as -Mp */
 			goto opt_M_p;
 		case 'q':
