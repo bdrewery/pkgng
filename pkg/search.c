@@ -38,11 +38,11 @@
 void
 usage_search(void)
 {
-	fprintf(stderr, "usage: pkg search [-r repo] [-egxX] [search] [output] [modifier]... <pkg-name>\n");
+	fprintf(stderr, "usage: pkg search [-r repo] [-egxX] [search] [label] [modifier]... <pkg-name>\n");
 	fprintf(stderr, "       pkg search [-r repo] [-egxX] [-qcdfDsop] <pattern>\n");
 	fprintf(stderr, "       Search options: -So -Sn -Sp -Sc -Sd\n");
-	fprintf(stderr, "       Output options: -Oo -On -Op -Oc -Od\n");
-	fprintf(stderr, "       Modifiers: -Mf -Md -Mr -Ms -MS -MR\n");
+	fprintf(stderr, "       Label options: -Lo -Ln -Lp -Lc -Ld\n");
+	fprintf(stderr, "       Modifiers: -Mc -Mf -Md -Mr -Ms -MS -MR\n");
 	fprintf(stderr, "For more information see 'pkg help search'.\n");
 }
 
@@ -56,7 +56,7 @@ exec_search(int argc, char **argv)
 	unsigned int opt = 0;
 	match_t match = MATCH_REGEX;
 	pkgdb_field search = FIELD_NONE;
-	pkgdb_field output = FIELD_NONE;
+	pkgdb_field label = FIELD_NONE;
 	struct pkgdb *db = NULL;
 	struct pkgdb_it *it = NULL;
 	struct pkg *pkg = NULL;
@@ -104,24 +104,24 @@ exec_search(int argc, char **argv)
 				return (EX_USAGE);
 			}
 			break;
-		case 'O':
-			/* output options */
+		case 'L':
+			/* label options */
 			switch(optarg[0]) {
 			case 'o':
 			opt_O_o:
-				output = FIELD_ORIGIN;
+				label = FIELD_ORIGIN;
 				break;
 			case 'n':
-				output = FIELD_NAME;
+				label = FIELD_NAME;
 				break;
 			case 'p':
-				output = FIELD_NAMEVER;
+				label = FIELD_NAMEVER;
 				break;
 			case 'c':
-				output = FIELD_COMMENT;
+				label = FIELD_COMMENT;
 				break;
 			case 'd':
-				output = FIELD_DESC;
+				label = FIELD_DESC;
 				break;
 			default:
 				usage_search();
@@ -129,14 +129,17 @@ exec_search(int argc, char **argv)
 			}
 			break;
 		case 'M':
-			/* output modifiers */
+			/* label modifiers */
 			switch(optarg[0]) {
+			case 'c':
+				opt |= INFO_COMMENT;
+				break;
 			case 'f':
 			opt_M_f:
 				opt |= INFO_FULL;
-				flags |= PKG_LOAD_CATEGORIES|
-					PKG_LOAD_LICENSES|
-					PKG_LOAD_OPTIONS|
+				flags |= PKG_LOAD_CATEGORIES |
+					PKG_LOAD_LICENSES    |
+					PKG_LOAD_OPTIONS     |
 					PKG_LOAD_SHLIBS;
 				break;
 			case 'd':
@@ -154,6 +157,7 @@ exec_search(int argc, char **argv)
 				break;
 			case 'S':
 				opt |= INFO_PKGSIZE;
+				break;
 			case 'p':
 			opt_M_p:
 				opt |= INFO_PREFIX;
@@ -208,10 +212,10 @@ exec_search(int argc, char **argv)
 		else
 			search = FIELD_NAMEVER; /* Default search */
 	}
-	if (output == FIELD_NONE)
-		output = search; /* By default, show what was searched  */
+	if (label == FIELD_NONE)
+		label = search; /* By default, show what was searched  */
 
-	switch(output) {
+	switch(label) {
 	case FIELD_NONE:
 		break;		/* should never happen */
 	case FIELD_ORIGIN:
@@ -251,8 +255,5 @@ exec_search(int argc, char **argv)
 	if (!atleastone)
 		ret = EPKG_FATAL;
 
-	if (ret == EPKG_END)
-		ret = EPKG_OK;
-
-	return ((ret == EPKG_OK) ? EX_OK : EX_SOFTWARE);
+	return ((ret == EPKG_OK || ret == EPKG_END) ? EX_OK : EX_SOFTWARE);
 }
