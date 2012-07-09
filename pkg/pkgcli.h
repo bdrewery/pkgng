@@ -184,14 +184,20 @@ void usage_which(void);
 /* Output YAML format */
 #define INFO_RAW	(1<<31)
 
-#define INFO_FULL	(INFO_NAME|INFO_VERSION|INFO_ORIGIN|INFO_PREFIX|INFO_REPOSITORY|INFO_CATEGORIES|INFO_LICENSES|INFO_MAINTAINER|INFO_WWW|INFO_COMMENT|INFO_OPTIONS|INFO_SHLIBS|INFO_FLATSIZE|INFO_PKGSIZE|INFO_DESCR)
+#define INFO_FULL	(INFO_NAME|INFO_VERSION|INFO_ORIGIN|INFO_PREFIX| \
+			 INFO_REPOSITORY|INFO_CATEGORIES|INFO_LICENSES|  \
+			 INFO_MAINTAINER|INFO_WWW|INFO_COMMENT|          \
+			 INFO_OPTIONS|INFO_SHLIBS|INFO_FLATSIZE|         \
+			 INFO_PKGSIZE|INFO_DESCR)
 
-#define INFO_MULTILINE	(INFO_OPTIONS|INFO_SHLIBS|INFO_DESCR|INFO_MESSAGE|INFO_DEPS|INFO_RDEPS|INFO_FILES|INFO_DIRS)
+#define INFO_MULTILINE	(INFO_OPTIONS|INFO_SHLIBS|INFO_DESCR|INFO_MESSAGE| \
+			 INFO_DEPS|INFO_RDEPS|INFO_FILES|INFO_DIRS)
 
 bool query_yesno(const char *msg, ...);
 void print_info(struct pkg * const pkg, unsigned int opt);
 char *absolutepath(const char *src, char *dest, size_t dest_len);
-void print_jobs_summary(struct pkg_jobs *j, pkg_jobs_t type, const char *msg, ...);
+void print_jobs_summary(struct pkg_jobs *j, pkg_jobs_t type,
+			const char *msg, ...);
 
 int event_callback(void *data, struct pkg_event *ev);
 
@@ -207,7 +213,10 @@ struct query_flags {
 };
 
 void print_query(struct pkg *pkg, char *qstr, char multiline);
-int format_sql_condition(const char *str, struct sbuf *sqlcond, bool for_remote);
-int analyse_query_string(char *qstr, struct query_flags *q_flags, const unsigned int q_flags_len, int *flags, char *multiline);
+int format_sql_condition(const char *str, struct sbuf *sqlcond,
+			 bool for_remote);
+int analyse_query_string(char *qstr, struct query_flags *q_flags,
+			 const unsigned int q_flags_len, int *flags,
+			 char *multiline);
 
 #endif
