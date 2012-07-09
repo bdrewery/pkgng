@@ -50,8 +50,8 @@ usage_info(void)
 {
 	fprintf(stderr, "usage: pkg info <pkg-name>\n");
 	fprintf(stderr, "       pkg info -a\n");
-	fprintf(stderr, "       pkg info [-egxXIdrlBsqOf] <pkg-name>\n");
-	fprintf(stderr, "       pkg info [-IdrlBsqfR] -F <pkg-file>\n\n");
+	fprintf(stderr, "       pkg info [-BDdefgIlOqRrsXx] <pkg-name>\n");
+	fprintf(stderr, "       pkg info [-BDdfIlqRrs] -F <pkg-file>\n\n");
 	fprintf(stderr, "For more information see 'pkg help info'.\n");
 }
 
