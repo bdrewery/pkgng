@@ -145,12 +145,14 @@ print_info(struct pkg * const pkg, unsigned int options)
 	bool print_tag = false;
 	char size[7];
 	const char *name, *version, *prefix, *origin, *reponame, *repourl;
-	const char *maintainer, *www, *comment, *desc, *message;
+	const char *maintainer, *www, *comment, *desc, *message, *arch;
+	const char *repopath;
 	char *m;
 	unsigned opt;
 	int64_t flatsize, newflatsize, newpkgsize;
 	lic_t licenselogic;
 	int cout = 0;		/* Number of characters output */
+	int info_num;		/* Number of different data items to print */
 
 	pkg_config_bool(PKG_CONFIG_MULTIREPOS, &multirepos_enabled);
 
@@ -169,7 +171,9 @@ print_info(struct pkg * const pkg, unsigned int options)
 		PKG_NEW_FLATSIZE,  &newflatsize,
 		PKG_NEW_PKGSIZE,   &newpkgsize,
 		PKG_LICENSE_LOGIC, &licenselogic,
-		PKG_MESSAGE,       &message);
+		PKG_MESSAGE,       &message,
+		PKG_ARCH,	   &arch,
+		PKG_REPOPATH,	   &repopath);
 
 	if (options & INFO_RAW) { /* Not for remote packages */
 		if (pkg_type(pkg) != PKG_REMOTE) {
@@ -201,33 +205,17 @@ print_info(struct pkg * const pkg, unsigned int options)
 	   more than one item to print per pkg, use 'key : value'
 	   style to show on a new line.  */
 
-	if (cout > 0 && (options & INFO_ALL) == 0) {
+	info_num = 0;
+	for (opt = 0x1; opt <= INFO_LASTFIELD; opt <<= 1) 
+		if ((opt & options) != 0)
+			info_num++;
+
+	if (info_num == 0 && cout > 0) {
 		printf("\n");
 		return;
 	}
 
-	if ((options & INFO_ALL) == INFO_NAME		||
-	    (options & INFO_ALL) == INFO_VERSION	||
-	    (options & INFO_ALL) == INFO_ORIGIN		||
-	    (options & INFO_ALL) == INFO_PREFIX		||
-	    (options & INFO_ALL) == INFO_REPOSITORY	||
-	    (options & INFO_ALL) == INFO_CATEGORIES	||
-	    (options & INFO_ALL) == INFO_LICENSES	||
-	    (options & INFO_ALL) == INFO_MAINTAINER	||
-	    (options & INFO_ALL) == INFO_WWW		||
-	    (options & INFO_ALL) == INFO_COMMENT	||
-	    (options & INFO_ALL) == INFO_OPTIONS	||
-	    (options & INFO_ALL) == INFO_SHLIBS		||
-	    (options & INFO_ALL) == INFO_FLATSIZE	||
-	    (options & INFO_ALL) == INFO_PKGSIZE	||
-	    (options & INFO_ALL) == INFO_DESCR		||
-	    (options & INFO_ALL) == INFO_MESSAGE	||
-	    (options & INFO_ALL) == INFO_DEPS		||
-	    (options & INFO_ALL) == INFO_RDEPS		||
-	    (options & INFO_ALL) == INFO_FILES		||
-	    (options & INFO_ALL) == INFO_DIRS		||
-	    (options & INFO_ALL) == INFO_USERS		||
-	    (options & INFO_ALL) == INFO_GROUPS) {
+	if (info_num == 1) {
 		/* Only one item to print */
 		print_tag = false;
 		if (!quiet) {
@@ -443,6 +431,27 @@ print_info(struct pkg * const pkg, unsigned int options)
 					printf(" %s", pkg_group_name(group));
 				printf("\n");
 			}
+			break;
+		case INFO_ARCH:
+			if (print_tag)
+				printf("%-15s: ", "Architecture");
+			printf("%s\n", arch);
+			break;
+		case INFO_REPOURL:
+			if (!multirepos_enabled) {
+				pkg_config_string(PKG_CONFIG_REPO,
+						  &repourl);
+			}
+			if (pkg_type(pkg) == PKG_REMOTE &&
+			    repourl != NULL && repourl[0] != '\0') {
+				if (print_tag)
+					printf("%-15s ", "Package URL");
+				if (repourl[strlen(repourl) -1] == '/')
+					printf("%s%s\n", repourl, repopath);
+				else
+					printf("%s/%s\n", repourl, repopath);
+			} else if (!print_tag)
+				printf("\n");
 			break;
 		}
 	}
