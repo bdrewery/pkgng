@@ -275,11 +275,12 @@ print_info(struct pkg * const pkg, unsigned int options)
 			break;
 		case INFO_REPOSITORY:
 			if (pkg_type(pkg) == PKG_REMOTE &&
-			    multirepos_enabled) {
+				multirepos_enabled) {
 				if (print_tag)
 					printf("%-15s: ", "Repository");
 				printf("%s [%s]\n", reponame, repourl);
-			}
+			} else if (!print_tag)
+				printf("\n");
 			break;
 		case INFO_CATEGORIES:
 			if (!pkg_list_is_empty(pkg, PKG_CATEGORIES)) {
@@ -290,7 +291,8 @@ print_info(struct pkg * const pkg, unsigned int options)
 				while (pkg_categories(pkg, &cat) == EPKG_OK)
 					printf(" %s", pkg_category_name(cat));
 				printf("\n");
-			}
+			} else if (!print_tag)
+				printf("\n");
 			break;
 		case INFO_LICENSES:
 			if (!pkg_list_is_empty(pkg, PKG_LICENSES)) {
@@ -303,8 +305,9 @@ print_info(struct pkg * const pkg, unsigned int options)
 						printf(" %c", licenselogic);
 					printf(" %s", pkg_license_name(lic));
 				}
+				printf("\n");				
+			} else if (!print_tag)
 				printf("\n");
-			}
 			break;
 		case INFO_MAINTAINER:
 			if (print_tag)
@@ -362,7 +365,8 @@ print_info(struct pkg * const pkg, unsigned int options)
 				if (print_tag)
 					printf("%-15s: ", "Pkg size");
 				printf("%s\n", size);
-			}
+			} else if (!print_tag)
+				printf("\n");
 			break;
 		case INFO_DESCR:
 			if (print_tag)
