@@ -30,19 +30,86 @@
 #include <string.h>
 #include <unistd.h>
 #include <sysexits.h>
+#include <err.h>
 
 #include <pkg.h>
 
 #include "pkgcli.h"
 
+typedef struct _cliopt {
+	const char *option;
+	char key;
+} cliopt;
+
+/* an option string should not be a prefix of any other option */ 
+static const cliopt search_label[] = {
+	{ "comment",     'c'  },
+	{ "description", 'd'  },
+	{ "name",        'n'  },
+	{ "origin",      'o'  },
+	{ "package",     'p'  },
+	{ NULL,          '\0' },
+};
+
+static const cliopt modifiers[] = {
+	{ "comment",      'c'  },
+	{ "depends-on",   'd'  },
+	{ "full",         'f'  },
+	{ "package-size", 'S'  },
+	{ "prefix",       'p'  },
+	{ "repository",   'R'  },
+	{ "required-by",  'r'  },
+	{ "size",         's'  },
+	{ NULL,           '\0' },
+};	
+
+static char
+match_optarg(const cliopt *optlist, const char *opt)
+{
+	int i, matched = -1;
+	char key = '\0';
+	size_t optlen;
+
+	optlen = strlen(opt);
+
+	/* Match any unique prefix from  optlist */
+	for (i = 0; optlist[i].option != NULL; i++) {
+		if (strncmp(opt, optlist[i].option, optlen) != 0)
+			continue;
+		if (matched > 0) {
+			warnx("\"%s\" is ambiguous: did you mean "
+			      "\"%s\" or \"%s\"?", opt,
+			      optlist[matched].option, optlist[i].option);
+			key = '\0';
+			break;
+		}
+		matched = i;
+		key = optlist[i].key;
+	}
+	return (key);
+}
+
 void
 usage_search(void)
 {
-	fprintf(stderr, "usage: pkg search [-r repo] [-egxX] [search] [label] [modifier]... <pkg-name>\n");
+	int i, n;
+
+	fprintf(stderr, "usage: pkg search [-r repo] [-egxX] [-S search] [-L label] [-M mod]... <pkg-name>\n");
 	fprintf(stderr, "       pkg search [-r repo] [-egxX] [-qcdfDsop] <pattern>\n");
-	fprintf(stderr, "       Search options: -So -Sn -Sp -Sc -Sd\n");
-	fprintf(stderr, "       Label options: -Lo -Ln -Lp -Lc -Ld\n");
-	fprintf(stderr, "       Modifiers: -Mc -Mf -Md -Mr -Ms -MS -MR\n");
+	n = fprintf(stderr, "       Search and Label options:");
+	for (i = 0; search_label[i].option != NULL; i++) {
+		if (n > 72)
+			n = fprintf(stderr, "\n            ");
+		n += fprintf(stderr, " %s", search_label[i].option);
+	}
+	fprintf(stderr, "\n");
+	n = fprintf(stderr, "       Output Modifiers:");
+	for (i = 0; modifiers[i].option != NULL; i++) {
+		if (n > 68)
+			n = fprintf(stderr, "\n            ");
+		n += fprintf(stderr, " %s", modifiers[i].option);
+	}
+	fprintf(stderr, "\n");
 	fprintf(stderr, "For more information see 'pkg help search'.\n");
 }
 
@@ -81,7 +148,7 @@ exec_search(int argc, char **argv)
 			break;
 		case 'S':
 			/* search options */
-			switch(optarg[0]) {
+			switch(match_optarg(search_label, optarg)) {
 			case 'o':
 				search = FIELD_ORIGIN;
 				break;
@@ -106,7 +173,7 @@ exec_search(int argc, char **argv)
 			break;
 		case 'L':
 			/* label options */
-			switch(optarg[0]) {
+			switch(match_optarg(search_label, optarg)) {
 			case 'o':
 			opt_L_o:
 				label = FIELD_ORIGIN;
@@ -129,8 +196,8 @@ exec_search(int argc, char **argv)
 			}
 			break;
 		case 'M':
-			/* label modifiers */
-			switch(optarg[0]) {
+			/* output modifiers */
+			switch(match_optarg(modifiers, optarg)) {
 			case 'c':
 				opt |= INFO_COMMENT;
 				break;
