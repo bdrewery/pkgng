@@ -47,7 +47,7 @@ static const cliopt search_label[] = {
 	{ "description", 'd'  },
 	{ "name",        'n'  },
 	{ "origin",      'o'  },
-	{ "package",     'p'  },
+	{ "pkg-name",    'p'  },
 	{ NULL,          '\0' },
 };
 
@@ -58,7 +58,7 @@ static const cliopt modifiers[] = {
 	{ "description",  'D'  },
 	{ "full",         'f'  },
 	{ "maintainer",   'm'  },
-	{ "package-size", 'P'  },
+	{ "pkg-size",	  'P'  },
 	{ "prefix",       'p'  },
 	{ "repository",   'R'  },
 	{ "required-by",  'r'  },

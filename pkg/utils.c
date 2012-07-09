@@ -445,7 +445,7 @@ print_info(struct pkg * const pkg, unsigned int options)
 			if (pkg_type(pkg) == PKG_REMOTE &&
 			    repourl != NULL && repourl[0] != '\0') {
 				if (print_tag)
-					printf("%-15s ", "Package URL");
+					printf("%-15s: ", "Pkg URL");
 				if (repourl[strlen(repourl) -1] == '/')
 					printf("%s%s\n", repourl, repopath);
 				else
