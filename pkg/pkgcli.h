@@ -172,8 +172,10 @@ void usage_which(void);
 #define INFO_DIRS	(1<<19)
 #define INFO_USERS	(1<<20)
 #define INFO_GROUPS	(1<<21)
+#define INFO_ARCH	(1<<22)
+#define INFO_REPOURL	(1<<23)
 
-#define INFO_LASTFIELD	INFO_GROUPS
+#define INFO_LASTFIELD	INFO_REPOURL
 #define INFO_ALL	(((INFO_LASTFIELD) << 1) - 1)
 
 /* Identifying tags */
@@ -184,12 +186,14 @@ void usage_which(void);
 /* Output YAML format */
 #define INFO_RAW	(1<<31)
 
+/* Everything in the 'full' package output */
 #define INFO_FULL	(INFO_NAME|INFO_VERSION|INFO_ORIGIN|INFO_PREFIX| \
 			 INFO_REPOSITORY|INFO_CATEGORIES|INFO_LICENSES|  \
 			 INFO_MAINTAINER|INFO_WWW|INFO_COMMENT|          \
 			 INFO_OPTIONS|INFO_SHLIBS|INFO_FLATSIZE|         \
 			 INFO_PKGSIZE|INFO_DESCR)
 
+/* Everything that can take more than one line to print */
 #define INFO_MULTILINE	(INFO_OPTIONS|INFO_SHLIBS|INFO_DESCR|INFO_MESSAGE| \
 			 INFO_DEPS|INFO_RDEPS|INFO_FILES|INFO_DIRS)
 

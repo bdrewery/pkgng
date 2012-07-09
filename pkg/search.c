@@ -52,14 +52,20 @@ static const cliopt search_label[] = {
 };
 
 static const cliopt modifiers[] = {
+	{ "arch",         'a'  },
 	{ "comment",      'c'  },
 	{ "depends-on",   'd'  },
+	{ "description",  'D'  },
 	{ "full",         'f'  },
-	{ "package-size", 'S'  },
+	{ "maintainer",   'm'  },
+	{ "package-size", 'P'  },
 	{ "prefix",       'p'  },
 	{ "repository",   'R'  },
 	{ "required-by",  'r'  },
+	{ "shared-libs",  'S'  },
 	{ "size",         's'  },
+	{ "url",          'u'  },
+	{ "www",          'w'  },
 	{ NULL,           '\0' },
 };	
 
@@ -94,8 +100,8 @@ usage_search(void)
 {
 	int i, n;
 
-	fprintf(stderr, "usage: pkg search [-r repo] [-egxX] [-S search] [-L label] [-M mod]... <pkg-name>\n");
-	fprintf(stderr, "       pkg search [-r repo] [-egxX] [-qcdfDsop] <pattern>\n");
+	fprintf(stderr, "usage: pkg search [-r repo] [-egXx] [-S search] [-L label] [-M mod]... <pkg-name>\n");
+	fprintf(stderr, "       pkg search [-r repo] [-egXx] [-cDdfopqS] <pattern>\n\n");
 	n = fprintf(stderr, "       Search and Label options:");
 	for (i = 0; search_label[i].option != NULL; i++) {
 		if (n > 72)
@@ -198,8 +204,19 @@ exec_search(int argc, char **argv)
 		case 'M':
 			/* output modifiers */
 			switch(match_optarg(modifiers, optarg)) {
+			case 'a':
+				opt |= INFO_ARCH;
+				break;
 			case 'c':
 				opt |= INFO_COMMENT;
+				break;
+			case 'd':
+			opt_M_d:
+				opt |= INFO_DEPS;
+				flags |= PKG_LOAD_DEPS;
+				break;
+			case 'D':
+				opt |= INFO_DESCR;
 				break;
 			case 'f':
 			opt_M_f:
@@ -209,20 +226,10 @@ exec_search(int argc, char **argv)
 					PKG_LOAD_OPTIONS     |
 					PKG_LOAD_SHLIBS;
 				break;
-			case 'd':
-			opt_M_d:
-				opt |= INFO_DEPS;
-				flags |= PKG_LOAD_DEPS;
+			case 'm':
+				opt |= INFO_MAINTAINER;
 				break;
-			case 'r':
-				opt |= INFO_RDEPS;
-				flags |= PKG_LOAD_RDEPS;
-				break;
-			case 's':
-			opt_M_s:
-				opt |= INFO_FLATSIZE;
-				break;
-			case 'S':
+			case 'P':
 				opt |= INFO_PKGSIZE;
 				break;
 			case 'p':
@@ -232,24 +239,42 @@ exec_search(int argc, char **argv)
 			case 'R':
 				opt |= INFO_REPOSITORY;
 				break;
+			case 'r':
+				opt |= INFO_RDEPS;
+				flags |= PKG_LOAD_RDEPS;
+				break;
+			case 'S':
+				opt |= INFO_SHLIBS;
+				flags |= PKG_LOAD_SHLIBS;
+				break;
+			case 's':
+			opt_M_s:
+				opt |= INFO_FLATSIZE;
+				break;
+			case 'u':
+				opt |= INFO_REPOURL;
+				break;
+			case 'w':
+				opt |= INFO_WWW;
+				break;
 			default:
 				usage_search();
 				return (EX_USAGE);
 			}
 			break;
-		case 'c':	/* Same as -Sc */
+		case 'c':	/* Same as -S comment */
 			goto opt_S_c;
-		case 'd':	/* Same as -Sd */
+		case 'd':	/* Same as -S depends-on */
 			goto opt_S_d;
-		case 'f':	/* Same as -Mf */
+		case 'f':	/* Same as -M full */
 			goto opt_M_f;
-		case 'D':	/* Same as -MD */
+		case 'D':	/* Same as -M depends-on  */
 			goto opt_M_d;
-		case 's':	/* Same as -Ms */
+		case 's':	/* Same as -M size */
 			goto opt_M_s;
-		case 'o':	/* Same as -Lo */
+		case 'o':	/* Same as -L origin */
 			goto opt_L_o;
-		case 'p':	/* Same as -Mp */
+		case 'p':	/* Same as -M prefix */
 			goto opt_M_p;
 		case 'q':
 			quiet = true;
