@@ -175,6 +175,9 @@ print_info(struct pkg * const pkg, unsigned int options)
 		PKG_ARCH,	   &arch,
 		PKG_REPOPATH,	   &repopath);
 
+	if (!multirepos_enabled)
+		pkg_config_string(PKG_CONFIG_REPO, &repourl);
+
 	if (options & INFO_RAW) { /* Not for remote packages */
 		if (pkg_type(pkg) != PKG_REMOTE) {
 			pkg_emit_manifest(pkg, &m);
@@ -263,7 +266,7 @@ print_info(struct pkg * const pkg, unsigned int options)
 			break;
 		case INFO_REPOSITORY:
 			if (pkg_type(pkg) == PKG_REMOTE &&
-				multirepos_enabled) {
+			    repourl != NULL && repourl[0] != '\0') {
 				if (print_tag)
 					printf("%-15s: ", "Repository");
 				printf("%s [%s]\n", reponame, repourl);
@@ -438,10 +441,6 @@ print_info(struct pkg * const pkg, unsigned int options)
 			printf("%s\n", arch);
 			break;
 		case INFO_REPOURL:
-			if (!multirepos_enabled) {
-				pkg_config_string(PKG_CONFIG_REPO,
-						  &repourl);
-			}
 			if (pkg_type(pkg) == PKG_REMOTE &&
 			    repourl != NULL && repourl[0] != '\0') {
 				if (print_tag)
