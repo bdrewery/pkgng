@@ -85,86 +85,86 @@ exec_info(int argc, char **argv)
 	/* TODO: exclusive opts ? */
 	while ((ch = getopt(argc, argv, "aDegxXEIdrlBsqopOfF:R")) != -1) {
 		switch (ch) {
-			case 'a':
-				match = MATCH_ALL;
-				break;
-			case 'O':
-				origin_search = true;  /* this is only for ports compat */
-				break;
-			case 'e':
-				pkg_exists = true;;
-				retcode = 1;
-				break;
-			case 'g':
-				match = MATCH_GLOB;
-				break;
-			case 'x':
-				match = MATCH_REGEX;
-				break;
-			case 'X':
-				match = MATCH_EREGEX;
-				break;
-			case 'D':
-				opt |= INFO_MESSAGE;
-				query_flags |= PKG_LOAD_BASIC;
-				break;
-			case 'd':
-				opt |= INFO_DEPS;
-				query_flags |= PKG_LOAD_DEPS;
-				break;
-			case 'I':
-				opt |= INFO_COMMENT;
-				break;
-			case 'r':
-				opt |= INFO_RDEPS;
-				query_flags |= PKG_LOAD_RDEPS;
-				break;
-			case 'l':
-				opt |= INFO_FILES;
-				query_flags |= PKG_LOAD_FILES;
-				break;
-			case 'B':
-				opt |= INFO_SHLIBS;
-				query_flags |= PKG_LOAD_SHLIBS;
-				break;
-			case 's':
-				opt |= INFO_FLATSIZE;
-				break;
-			case 'E': /* ports compatibility */
-			case 'q':
-				quiet = true;
-				break;
-			case 'o':
-				opt |= INFO_ORIGIN;
-				break;
-			case 'p':
-				opt |= INFO_PREFIX;
-				break;
-			case 'f':
-				opt |= INFO_FULL;
-				query_flags |= PKG_LOAD_CATEGORIES |
-					PKG_LOAD_LICENSES	   |
-					PKG_LOAD_OPTIONS;
-				break;
-			case 'F':
-				file = optarg;
-				break;
-			case 'R':
-				opt |= INFO_RAW;
-				query_flags |= PKG_LOAD_FILES |
-					PKG_LOAD_DIRS	      |
-					PKG_LOAD_CATEGORIES   |
-					PKG_LOAD_LICENSES     |
-					PKG_LOAD_OPTIONS      |
-					PKG_LOAD_SCRIPTS      |
-					PKG_LOAD_USERS	      |
-					PKG_LOAD_GROUPS	      |
-					PKG_LOAD_DEPS	      |
-					PKG_LOAD_SHLIBS;
-				break;
-			default:
-				usage_info();
-				return(EX_USAGE);
+		case 'a':
+			match = MATCH_ALL;
+			break;
+		case 'O':
+			origin_search = true;  /* this is only for ports compat */
+			break;
+		case 'e':
+			pkg_exists = true;;
+			retcode = 1;
+			break;
+		case 'g':
+			match = MATCH_GLOB;
+			break;
+		case 'x':
+			match = MATCH_REGEX;
+			break;
+		case 'X':
+			match = MATCH_EREGEX;
+			break;
+		case 'D':
+			opt |= INFO_MESSAGE;
+			query_flags |= PKG_LOAD_BASIC;
+			break;
+		case 'd':
+			opt |= INFO_DEPS;
+			query_flags |= PKG_LOAD_DEPS;
+			break;
+		case 'I':
+			opt |= INFO_COMMENT;
+			break;
+		case 'r':
+			opt |= INFO_RDEPS;
+			query_flags |= PKG_LOAD_RDEPS;
+			break;
+		case 'l':
+			opt |= INFO_FILES;
+			query_flags |= PKG_LOAD_FILES;
+			break;
+		case 'B':
+			opt |= INFO_SHLIBS;
+			query_flags |= PKG_LOAD_SHLIBS;
+			break;
+		case 's':
+			opt |= INFO_FLATSIZE;
+			break;
+		case 'E': /* ports compatibility */
+		case 'q':
+			quiet = true;
+			break;
+		case 'o':
+			opt |= INFO_ORIGIN;
+			break;
+		case 'p':
+			opt |= INFO_PREFIX;
+			break;
+		case 'f':
+			opt |= INFO_FULL;
+			query_flags |= PKG_LOAD_CATEGORIES |
+				PKG_LOAD_LICENSES	   |
+				PKG_LOAD_OPTIONS;
+			break;
+		case 'F':
+			file = optarg;
+			break;
+		case 'R':
+			opt |= INFO_RAW;
+			query_flags |= PKG_LOAD_FILES |
+				PKG_LOAD_DIRS	      |
+				PKG_LOAD_CATEGORIES   |
+				PKG_LOAD_LICENSES     |
+				PKG_LOAD_OPTIONS      |
+				PKG_LOAD_SCRIPTS      |
+				PKG_LOAD_USERS	      |
+				PKG_LOAD_GROUPS	      |
+				PKG_LOAD_DEPS	      |
+				PKG_LOAD_SHLIBS;
+			break;
+		default:
+			usage_info();
+			return(EX_USAGE);
 		}
 	}
 
@@ -336,46 +336,50 @@ exec_info(int argc, char **argv)
 			pkg_get(pkg, PKG_VERSION, &version);
 			if (pkgversion != NULL) {
 				switch (pkg_version_cmp(version, pkgversion)) {
-					case -1:
-						if (sign != LT && sign != LE) {
-							gotone = false;
-							continue;
-						}
-						break;
-					case 0:
-						if (sign != LE && sign != GE && sign != EQ) {
-							gotone = false;
-							continue;
-						}
-						break;
-					case 1:
-						if (sign != GT && sign != GE) {
-							gotone = false;
-							continue;
-						}
-						break;
+				case -1:
+					if (sign != LT && sign != LE) {
+						gotone = false;
+						continue;
+					}
+					break;
+				case 0:
+					if (sign != LE &&
+					    sign != GE &&
+					    sign != EQ) {
+						gotone = false;
+						continue;
+					}
+					break;
+				case 1:
+					if (sign != GT && sign != GE) {
+						gotone = false;
+						continue;
+					}
+					break;
 				}
 			}
 			if (pkgversion2 != NULL) {
-				switch(pkg_version_cmp(version, pkgversion2)) {
-					case -1:
-						if (sign2 != LT && sign2 != LE) {
-							gotone = false;
-							continue;
-						}
-						break;
-					case 0:
-						if (sign2 != LE && sign2 != GE && sign2 != EQ) {
-							gotone = false;
-							continue;
-						}
-						break;
-					case 1:
-						if (sign2 != GT && sign2 != GE) {
-							gotone = false;
-							continue;
-						}
-						break;
+				switch (pkg_version_cmp(version, pkgversion2)) {
+				case -1:
+					if (sign2 != LT && sign2 != LE) {
+						gotone = false;
+						continue;
+					}
+					break;
+				case 0:
+					if (sign2 != LE &&
+					    sign2 != GE &&
+					    sign2 != EQ) {
+						gotone = false;
+						continue;
+					}
+					break;
+				case 1:
+					if (sign2 != GT && sign2 != GE) {
+						gotone = false;
+						continue;
+					}
+					break;
 				}
 			}
 			if (pkg_exists)
