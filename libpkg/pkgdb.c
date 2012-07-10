@@ -2442,6 +2442,16 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 				"(SELECT d.origin FROM '%s'.deps AS d, pkgjobs AS j WHERE d.package_id = j.pkgid) "
 				"AND (SELECT origin FROM main.packages WHERE origin=r.origin AND version=r.version) IS NULL;";
 
+	const char upwards_deps_sql[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
+				"maintainer, www, prefix, flatsize, pkgsize, "
+				"cksum, repopath, automatic) "
+				"SELECT DISTINCT r.id, r.origin, r.name, r.version, r.comment, r.desc, "
+				"r.arch, r.maintainer, r.www, r.prefix, r.flatsize, r.pkgsize, "
+				"r.cksum, r.path, 1 "
+				"FROM '%s'.packages AS r WHERE r.id IN "
+				"(SELECT d.package_id FROM '%s'.deps AS d, pkgjobs AS j WHERE d.origin = j.origin) "
+				"AND EXISTS (SELECT origin FROM main.packages WHERE origin=r.origin);";
+
 	const char weight_sql[] = "UPDATE pkgjobs SET weight=("
 		"SELECT COUNT(*) FROM '%s'.deps AS d, '%s'.packages AS p, pkgjobs AS j "
 			"WHERE d.origin = pkgjobs.origin "
@@ -2509,6 +2519,11 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 		sql_exec(db->sqlite, sbuf_get(sql));
 	} while (sqlite3_changes(db->sqlite) != 0);
 
+	if (recursive) {
+		do {
+			sql_exec(db->sqlite, upwards_deps_sql);
+		} while (sqlite3_changes(db->sqlite) != 0);
+	}
 
 	/* Determine if there is an upgrade needed */
 	sql_exec(db->sqlite, "INSERT OR REPLACE INTO pkgjobs (pkgid, origin, name, version, comment, desc, message, arch, "
