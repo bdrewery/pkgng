@@ -2403,7 +2403,7 @@ cleanup:
 }
 
 struct pkgdb_it *
-pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, const char *repo, bool force)
+pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, const char *repo, bool force, bool recursive)
 {
 	sqlite3_stmt *stmt = NULL;
 	struct pkgdb_it *it;
