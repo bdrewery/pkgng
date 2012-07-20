@@ -20,7 +20,7 @@
 .Os
 .Sh NAME
 .Nm "pkg add"
-.Nd Registers a package and installs it on the system
+.Nd Registers individual packages and installs them on the system
 .Sh SYNOPSIS
 .Nm
 .Op Fl IAfq
@@ -30,16 +30,49 @@
 .Ar <protocol>://<path>/<pkg-name> ...
 .Sh DESCRIPTION
 .Nm
-installs packages from either a local source or a remote one.
+installs each of the named packages from either a local or a remote
+source, in the order given on the command line.
+If a previous version of a package is already installed,
+.Nm
+will ask the user to confirm performing an upgrade.
+Package installations will fail unless all necessary dependencies are
+already installed, or unless the
+.Fl f
+flag is used.
+.Nm
+will attempt to install any missing dependencies by constructing a
+path or URL using the dependency name and version and the same
+directory or base URL as the named package.
+Confirmation of any questions is assumed when the
+.Fl y
+flag is used, or the
+.Cm ASSUME_ALWAYS_YES
+configuration variable is set in
+.Fa pkg.conf .
+.Nm 
+will refuse to reinstall a package at the same version as one
+previously installed, or to downgrade a package, unless the
+.Fl f
+flag is given.
 .Pp
 When installing from a remote source you need to specify
 the protocol to use when fetching the package.
-.Pp
 Currently supported protocols are FTP, HTTP and HTTPS.
+.Pp
+When installing from a local filesystem, you may use either
+a
+.Fa file://
+URL, or use a simple filesystem path.
 .Sh OPTIONS
 The following options are supported by
 .Nm :
-.Bl -tag -width I1
+.Bl -tag -width F1
+.It Fl f
+Force reinstallation or downgrade when a previously installed version
+of a package is not older than the package given as argument.
+Force installation of a package even though all the packages it
+depends on have not yet been installed.
+Force installation of a package built for a non-matching architecture.
 .It Fl I
 If any installation scripts (pre-install or post-install) exist for given
 packages, do not execute them.
@@ -52,6 +85,8 @@ For more information please refer to
 Force the reinstallation of the package if already installed.
 .It Fl q
 Force quiet output.
+.It Fl y
+Assume a yes answer to all confirmatory questions.
 .El
 .Sh ENVIRONMENT
 The following environment variables affect the execution of
