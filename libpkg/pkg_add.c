@@ -41,25 +41,6 @@
 #include "private/event.h"
 #include "private/pkg.h"
 
-
-int
-pkg_dep_already_installed(struct pkgdb *db, struct pkg_dep *dep)
-{
-	struct pkg *p = NULL;
-	struct pkgdb_it *it;
-	int ret = EPKG_FATAL;
-
-	it = pkgdb_query(db, pkg_dep_origin(dep), MATCH_EXACT);
-
-	if (pkgdb_it_next(it, &p, PKG_LOAD_BASIC) == EPKG_OK)
-		ret = EPKG_OK;
-
-	pkgdb_it_free(it);
-	pkg_free(p);
-
-	return (ret);
-}
-
 static int
 do_extract(struct pkg_archive *pa)
 {
