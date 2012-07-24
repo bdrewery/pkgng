@@ -263,7 +263,7 @@ print_info(struct pkg * const pkg, unsigned int options)
 	   style to show on a new line.  */
 
 	info_num = 0;
-	for (opt = 0x1U; opt <= INFO_LASTFIELD; opt <<= 1) 
+	for (opt = 0x1U; opt <= INFO_LASTFIELD; opt <<= 1)
 		if ((opt & options) != 0)
 			info_num++;
 
@@ -350,7 +350,7 @@ print_info(struct pkg * const pkg, unsigned int options)
 						printf(" %c", licenselogic);
 					printf(" %s", pkg_license_name(lic));
 				}
-				printf("\n");				
+				printf("\n");
 			} else if (!print_tag)
 				printf("\n");
 			break;
@@ -359,7 +359,7 @@ print_info(struct pkg * const pkg, unsigned int options)
 				printf("%-15s: ", "Maintainer");
 			printf("%s\n", maintainer);
 			break;
-		case INFO_WWW:	
+		case INFO_WWW:
 			if (print_tag)
 				printf("%-15s: ", "WWW");
 			printf("%s\n", www);
@@ -559,7 +559,7 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 	dlsize = oldsize = newsize = 0;
 	flatsize = newflatsize = pkgsize = 0;
 	name = version = newversion = NULL;
-	
+
 	pkg_config_string(PKG_CONFIG_CACHEDIR, &cachedir);
 
 	while (pkg_jobs(jobs, &pkg) == EPKG_OK) {
@@ -589,7 +589,7 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 						break;
 					}
 					continue;
-				} 
+				}
 				break;
 			case PKG_JOBS_DEINSTALL:
 			case PKG_JOBS_AUTOREMOVE:
@@ -604,6 +604,8 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 		}
 
 		switch (type) {
+		case PKG_JOBS_ADD:
+			/* fallsthrough */
 		case PKG_JOBS_INSTALL:
 		case PKG_JOBS_UPGRADE:
 			snprintf(path, MAXPATHLEN, "%s/%s", cachedir, pkgrepopath);
@@ -635,7 +637,7 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 		case PKG_JOBS_AUTOREMOVE:
 			oldsize += flatsize;
 			newsize += newflatsize;
-			
+
 			printf("\t%s-%s\n", name, version);
 			break;
 		case PKG_JOBS_FETCH:
@@ -658,6 +660,8 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 		humanize_number(size, sizeof(size), oldsize - newsize, "B", HN_AUTOSCALE, 0);
 
 		switch (type) {
+		case PKG_JOBS_ADD:
+			/* fallsthrough */
 		case PKG_JOBS_INSTALL:
 			printf("\nThe installation will free %s\n", size);
 			break;
@@ -676,6 +680,8 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 		humanize_number(size, sizeof(size), newsize - oldsize, "B", HN_AUTOSCALE, 0);
 
 		switch (type) {
+		case PKG_JOBS_ADD:
+			/* fallsthrough */
 		case PKG_JOBS_INSTALL:
 			printf("\nThe installation will require %s more space\n", size);
 			break;

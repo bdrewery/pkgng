@@ -129,10 +129,9 @@ exec_autoremove(__unused int argc, __unused char **argv)
 		if (dry_run)
 			yes = false;
 	}
-	if (!yes || (retcode = pkg_jobs_apply(jobs)) != EPKG_OK) {
-		retcode = EX_SOFTWARE;
+
+	if (!yes || (retcode = pkg_jobs_apply(jobs)) != EPKG_OK)
 		goto cleanup;
-	}
 
 	pkgdb_compact(db);
 

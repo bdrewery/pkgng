@@ -41,8 +41,27 @@
 #include "private/event.h"
 #include "private/pkg.h"
 
+
+int
+pkg_dep_already_installed(struct pkgdb *db, struct pkg_dep *dep)
+{
+	struct pkg *p = NULL;
+	struct pkgdb_it *it;
+	int ret = EPKG_FATAL;
+
+	it = pkgdb_query(db, pkg_dep_origin(dep), MATCH_EXACT);
+
+	if (pkgdb_it_next(it, &p, PKG_LOAD_BASIC) == EPKG_OK)
+		ret = EPKG_OK;
+
+	pkgdb_it_free(it);
+	pkg_free(p);
+
+	return (ret);
+}
+
 static int
-do_extract(struct archive *a, struct archive_entry *ae)
+do_extract(struct pkg_archive *pa)
 {
 	int	retcode = EPKG_OK;
 	int	ret = 0;
@@ -50,9 +69,10 @@ do_extract(struct archive *a, struct archive_entry *ae)
 	struct stat st;
 
 	do {
-		const char *pathname = archive_entry_pathname(ae);
+		const char *pathname = archive_entry_pathname(pa->entry);
 
-		ret = archive_read_extract(a, ae, EXTRACT_ARCHIVE_FLAGS);
+		ret = archive_read_extract(pa->archive, pa->entry,
+			  EXTRACT_ARCHIVE_FLAGS);
 		if (ret != ARCHIVE_OK) {
 			/*
 			 * show error except when the failure is during
@@ -61,10 +81,10 @@ do_extract(struct archive *a, struct archive_entry *ae)
 			 * this allow to install packages linux_base from
 			 * package for example
 			 */
-			if (archive_entry_filetype(ae) != AE_IFDIR ||
+			if (archive_entry_filetype(pa->entry) != AE_IFDIR ||
 			    !is_dir(pathname)) {
 				pkg_emit_error("archive_read_extract(): %s",
-				    archive_error_string(a));
+				    archive_error_string(pa->archive));
 				retcode = EPKG_FATAL;
 				break;
 			}
@@ -80,20 +100,22 @@ do_extract(struct archive *a, struct archive_entry *ae)
 		 */
 		if (is_conf_file(pathname, path, sizeof(path))
 		    && lstat(path, &st) == -1 && errno == ENOENT) {
-			archive_entry_set_pathname(ae, path);
-			ret = archive_read_extract(a,ae, EXTRACT_ARCHIVE_FLAGS);
+			archive_entry_set_pathname(pa->entry, path);
+			ret = archive_read_extract(pa->archive, pa->entry,
+				  EXTRACT_ARCHIVE_FLAGS);
 			if (ret != ARCHIVE_OK) {
 				pkg_emit_error("archive_read_extract(): %s",
-				    archive_error_string(a));
+				    archive_error_string(pa->archive));
 				retcode = EPKG_FATAL;
 				break;
 			}
 		}
-	} while ((ret = archive_read_next_header(a, &ae)) == ARCHIVE_OK);
+	} while ((ret = archive_read_next_header(pa->archive, &(pa->entry))) ==
+		    ARCHIVE_OK);
 
 	if (ret != ARCHIVE_EOF) {
 		pkg_emit_error("archive_read_next_header(): %s",
-		    archive_error_string(a));
+		    archive_error_string(pa->archive));
 		retcode = EPKG_FATAL;
 	}
 
@@ -149,41 +171,43 @@ cleanup:
 }
 
 int
-pkg_add(struct pkgdb *db, const char *path, unsigned flags)
+pkg_add(struct pkgdb *db, struct pkg *pkg, unsigned flags)
 {
 	const char	*arch;
 	const char	*myarch;
 	const char	*origin;
-	const char	*name;
-	struct archive	*a;
-	struct archive_entry *ae;
-	struct pkg	*pkg = NULL;
-	struct pkg_dep	*dep = NULL;
 	struct pkg      *pkg_inst = NULL;
 	bool		 extract = true;
 	bool		 handle_rc = false;
-	char		 dpath[MAXPATHLEN + 1];
-	const char	*basedir;
-	const char	*ext;
 	char		*mtree;
 	char		*prefix;
 	int		 retcode = EPKG_OK;
 	int		 ret;
 
-	assert(path != NULL);
+#if 0
+	struct pkg_dep	*dep = NULL;
+	const char	*basedir;
+	const char	*ext;
+	char		 dpath[MAXPATHLEN + 1];
+#endif
+
+	assert(db != NULL);
+	assert(pkg != NULL);
+	assert(pkg->type == PKG_FILE);
+
+	if (!pkg_archive_is_open(pkg))
+		return (EPKG_FATAL);
 
 	/*
-	 * Open the package archive file, read all the meta files and set the
-	 * current archive_entry to the first non-meta file.
-	 * If there is no non-meta files, EPKG_END is returned.
+	 * Opening the package will leave pkg-archive->entry pointing
+	 * to the first non-meta file entry in the package, or NULL if
+	 * there are no regular files to install. Flag the latter
+	 * case.
 	 */
-	ret = pkg_open2(&pkg, &a, &ae, path);
-	if (ret == EPKG_END)
+
+	if (pkg->archive->entry == NULL)
 		extract = false;
-	else if (ret != EPKG_OK) {
-		retcode = ret;
-		goto cleanup;
-	}
+	
 	if ((flags & PKG_ADD_UPGRADE) == 0)
 		pkg_emit_install_begin(pkg);
 
@@ -233,6 +257,7 @@ pkg_add(struct pkgdb *db, const char *path, unsigned flags)
 		goto cleanup;
 	}
 
+#if 0				/* Do all this much earlier */
 	/*
 	 * Check for dependencies
 	 */
@@ -266,6 +291,7 @@ pkg_add(struct pkgdb *db, const char *path, unsigned flags)
 			}
 		}
 	}
+#endif
 
 	/* register the package before installing it in case there are
 	 * problems that could be caught here. */
@@ -290,7 +316,8 @@ pkg_add(struct pkgdb *db, const char *path, unsigned flags)
 	/*
 	 * Extract the files on disk.
 	 */
-	if (extract && (retcode = do_extract(a, ae)) != EPKG_OK) {
+
+	if (extract && (retcode = do_extract(pkg->archive)) != EPKG_OK) {
 		/* If the add failed, clean up */
 		pkg_delete_files(pkg, 1);
 		pkg_delete_dirs(db, pkg, 1);
@@ -324,8 +351,11 @@ pkg_add(struct pkgdb *db, const char *path, unsigned flags)
 		pkg_emit_install_finished(pkg);
 
 	cleanup:
+
 	if (a != NULL)
 		archive_read_free(a);
+
+	pkg_close(pkg);
 
 	pkg_free(pkg);
 	pkg_free(pkg_inst);

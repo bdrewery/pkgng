@@ -414,3 +414,26 @@ pkg_shlib_name(struct pkg_shlib const * const sl)
 
 	return (sbuf_get(sl->name));
 }
+
+/*
+ * Package Archive File
+ */
+
+int
+pkg_archive_new(struct pkg_archive **pa)
+{
+	if ((*pa = calloc(1, sizeof(struct pkg_archive))) == NULL)
+		return (EPKG_FATAL);
+
+	return (EPKG_OK);
+}
+
+void
+pkg_archive_free(struct pkg_archive *pa)
+{
+	if (pa->archive == NULL)
+		return;
+
+	archive_read_finish(pa->archive);
+	free(pa);
+}

@@ -73,6 +73,7 @@ pkg_new(struct pkg **pkg, pkg_t type)
 	(*pkg)->locked = false;
 	(*pkg)->type = type;
 	(*pkg)->licenselogic = LICENSE_SINGLE;
+	(*pkg)->archive = NULL;
 
 	return (EPKG_OK);
 }
@@ -114,6 +115,8 @@ pkg_reset(struct pkg *pkg, pkg_t type)
 
 	pkg->rowid = 0;
 	pkg->type = type;
+
+	pkg_close(pkg);
 }
 
 void
@@ -139,6 +142,8 @@ pkg_free(struct pkg *pkg)
 	pkg_list_free(pkg, PKG_GROUPS);
 	pkg_list_free(pkg, PKG_SHLIBS_REQUIRED);
 	pkg_list_free(pkg, PKG_SHLIBS_PROVIDED);
+
+	pkg_close(pkg);
 
 	free(pkg);
 }
@@ -973,6 +978,7 @@ pkg_list_free(struct pkg *pkg, pkg_list list)  {
 int
 pkg_open(struct pkg **pkg_p, const char *path)
 {
+<<<<<<< HEAD
 	struct archive *a;
 	struct archive_entry *ae;
 	int ret;
@@ -991,6 +997,8 @@ int
 pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae, const char *path)
 {
 	struct pkg *pkg;
+	struct archive *a;
+	struct archive_entry **ae;
 	pkg_error_t retcode = EPKG_OK;
 	int ret;
 	int64_t size;
@@ -1016,9 +1024,9 @@ pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae, con
 	archive_read_support_filter_all(*a);
 	archive_read_support_format_tar(*a);
 
-	if (archive_read_open_filename(*a, path, 4096) != ARCHIVE_OK) {
+	if (archive_read_open_filename(a, path, 4096) != ARCHIVE_OK) {
 		pkg_emit_error("archive_read_open_filename(%s): %s", path,
-					   archive_error_string(*a));
+					   archive_error_string(a));
 		retcode = EPKG_FATAL;
 		goto cleanup;
 	}
@@ -1033,7 +1041,17 @@ pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae, con
 	pkg = *pkg_p;
 	pkg->type = PKG_FILE;
 
-	while ((ret = archive_read_next_header(*a, ae)) == ARCHIVE_OK) {
+	if (pkg_archive_new(&(pkg->archive)) != EPKG_OK) {
+		pkg_emit_errno("calloc", "out of memory");
+		retcode = EPKG_FATAL;
+		goto cleanup;
+	}
+
+	strlcpy(pkg->archive->path, path, sizeof(pkg->archive->path));
+	pkg->archive->archive = a;
+	ae = &(pkg->archive->entry);
+
+	while ((ret = archive_read_next_header(a, ae)) == ARCHIVE_OK) {
 		fpath = archive_entry_pathname(*ae);
 		if (fpath[0] != '+')
 			break;
@@ -1042,11 +1060,13 @@ pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae, con
 			size = archive_entry_size(*ae);
 			if (size <=0) {
 				retcode = EPKG_FATAL;
-				pkg_emit_error("%s is not a valid package: empty +MANIFEST found", path);
+				pkg_emit_error("%s is not a valid package: "
+				    "empty +MANIFEST found", path);
 				goto cleanup;
 			}
 
-			while ((size = archive_read_data(*a, buf, sizeof(buf))) > 0) {
+			while ((size = archive_read_data(a, buf,
+			    sizeof(buf))) > 0) {
 				sbuf_bcat(manifest, buf, size);
 			}
 
@@ -1063,7 +1083,8 @@ pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae, con
 			if (strcmp(fpath, files[i].name) == 0) {
 				sbuf = &pkg->fields[files[i].attr];
 				sbuf_init(sbuf);
-				while ((size = archive_read_data(*a, buf, sizeof(buf))) > 0) {
+				while ((size = archive_read_data(a, buf,
+				    sizeof(buf))) > 0) {
 					sbuf_bcat(*sbuf, buf, size);
 				}
 				sbuf_finish(*sbuf);
@@ -1073,30 +1094,54 @@ pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae, con
 
 	if (ret != ARCHIVE_OK && ret != ARCHIVE_EOF) {
 		pkg_emit_error("archive_read_next_header(): %s",
-					   archive_error_string(*a));
+					   archive_error_string(a));
 		retcode = EPKG_FATAL;
 	}
 
-	if (ret == ARCHIVE_EOF)
+	if (ret == ARCHIVE_EOF) {
+		pkg->archive->entry = NULL;
 		retcode = EPKG_END;
+	}
 
 	if (sbuf_len(manifest) == 0) {
 		retcode = EPKG_FATAL;
-		pkg_emit_error("%s is not a valid package: no +MANIFEST found", path);
+		pkg_emit_error("%s is not a valid package: no +MANIFEST found",
+			       path);
 	}
 
-	cleanup:
+cleanup:
 	sbuf_delete(manifest);
 
 	if (retcode != EPKG_OK && retcode != EPKG_END) {
 		if (*a != NULL)
-			archive_read_free(*a);
+			archive_read_finish(a);
 		*a = NULL;
 		*ae = NULL;
+
+		pkg_close(pkg);
 	}
 
 	return (retcode);
 }
+
+int
+pkg_close(struct pkg *pkg)
+{
+	assert(pkg != NULL);
+
+	if (pkg_archive_is_open(pkg)) {
+		pkg_archive_free(pkg->archive);
+		pkg->archive = NULL;
+	}
+
+	return (EPKG_OK);
+}
+
+bool
+pkg_archive_is_open(struct pkg *pkg)
+{
+	return (pkg->archive != NULL);
+} 
 
 int
 pkg_copy_tree(struct pkg *pkg, const char *src, const char *dest)

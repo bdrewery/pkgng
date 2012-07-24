@@ -23,11 +23,11 @@
 .Nd Registers individual packages and installs them on the system
 .Sh SYNOPSIS
 .Nm
-.Op Fl IAfq
-.Ar <pkg-name> ...
+.Op Fl AfInqy
+.Ar <pkg-name>
 .Nm
-.Op Fl IAfq
-.Ar <protocol>://<path>/<pkg-name> ...
+.Op Fl AfInqy
+.Ar <protocol>://<path>/<pkg-name>
 .Sh DESCRIPTION
 .Nm
 installs each of the named packages from either a local or a remote
@@ -58,11 +58,22 @@ flag is given.
 When installing from a remote source you need to specify
 the protocol to use when fetching the package.
 Currently supported protocols are FTP, HTTP and HTTPS.
+Downloaded packages are stored in
+.Cm PKG_CACHEDIR .
+There is no means of predicting if there is sufficient space
+available to contain the downloads.
+.Nm
+will attempt to install as many of the requested packages or
+dependencies as it has successfully been able to fetch.
 .Pp
 When installing from a local filesystem, you may use either
 a
 .Fa file://
 URL, or use a simple filesystem path.
+Using a
+.Fa file://
+URL will cause the package to be copied to
+.Cm PKG_CACHEDIR .
 .Sh OPTIONS
 The following options are supported by
 .Nm :
@@ -74,17 +85,24 @@ Force installation of a package even though all the packages it
 depends on have not yet been installed.
 Force installation of a package built for a non-matching architecture.
 .It Fl I
-If any installation scripts (pre-install or post-install) exist for given
-packages, do not execute them.
+If any installation scripts (pre-install or post-install) exist for a given
+package, do not execute them.
 .It Fl A
 Mark the installed packages as orphan.
 Will be automatically removed if no other packages depend on them.
 For more information please refer to
 .Xr pkg-autoremove 8
-.It Fl f
-Force the reinstallation of the package if already installed.
+.It Fl n
+Dry-run mode: show what would be done, but do not proceed with adding
+any packages.
 .It Fl q
-Force quiet output.
+Quiet mode: reduce the amount of informational messages printed while
+.Nm
+runs.
+Setting
+.Fl n
+overrides the effect of
+.Fl q .
 .It Fl y
 Assume a yes answer to all confirmatory questions.
 .El
@@ -98,6 +116,7 @@ for further description.
 .It Ev ASSUME_ALWAYS_YES
 .It Ev HANDLE_RC_SCRIPTS
 .It Ev PKG_DBDIR
+.It Ev PKG_CACHEDIR
 .El
 .Sh FILES
 See

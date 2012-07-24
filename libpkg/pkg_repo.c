@@ -469,6 +469,7 @@ read_pkg_file(void *data)
 			    PKG_REPOPATH, pkg_path,
 			    PKG_NEW_PKGSIZE, st_size);
 		}
+		pkg_close(r->pkg);
 
 
 		/* Add result to the FIFO and notify */

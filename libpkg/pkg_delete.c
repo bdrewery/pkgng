@@ -39,7 +39,7 @@
 #include "private/utils.h"
 
 int
-pkg_delete(struct pkg *pkg, struct pkgdb *db, unsigned flags)
+pkg_delete(struct pkgdb *db, struct pkg *pkg, unsigned flags)
 {
 	struct pkg_dep	*rdep = NULL;
 	int		 ret;

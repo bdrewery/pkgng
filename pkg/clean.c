@@ -302,6 +302,8 @@ exec_clean(__unused int argc, __unused char **argv)
 			continue;
 		}
 
+		pkg_close(pkg);	/* Don't need to access archive file */
+
 		pkg_get(pkg, PKG_ORIGIN, &origin);
 		it = pkgdb_search(db, origin, MATCH_EXACT, FIELD_ORIGIN,
 		    FIELD_NONE, NULL);

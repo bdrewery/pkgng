@@ -283,13 +283,14 @@ typedef enum {
 	PKG_SCRIPT_UNKNOWN
 } pkg_script;
 
-typedef enum _pkg_jobs_t {
+typedef enum _pkg_job_request {
 	PKG_JOBS_INSTALL,
 	PKG_JOBS_DEINSTALL,
 	PKG_JOBS_FETCH,
 	PKG_JOBS_AUTOREMOVE,
 	PKG_JOBS_UPGRADE,
-} pkg_jobs_t;
+	PKG_JOBS_ADD,
+} pkg_job_request;
 
 typedef enum _pkg_flags {
 	PKG_FLAG_NONE = 0,
@@ -475,12 +476,26 @@ void pkg_free(struct pkg *);
 int pkg_is_valid(struct pkg *);
 
 /**
- * Open a package file archive and retrive informations.
+ * Open a package archive file and retrive information.
  * @param p A pointer to pkg allocated by pkg_new(), or if it points to a
  * NULL pointer, the function allocate a new pkg using pkg_new().
  * @param path The path to the local package archive.
  */
 int pkg_open(struct pkg **p, const char *path);
+
+/**
+ * Close a package archive file previously opened by pkg_open()
+ * @param pkg The pkg to close.
+ */
+int pkg_close(struct pkg *pkg);
+
+/**
+ * true if the archive file associated with pkg has been
+ * opened by pkg_open(), but not closed by pkg_close() or
+ * pkg_free()
+ */
+bool pkg_archive_is_open(struct pkg *pkg);
+
 
 /**
  * @return the type of the package.
@@ -974,10 +989,10 @@ void pkgdb_it_free(struct pkgdb_it *);
 int pkgdb_compact(struct pkgdb *db);
 
 /**
- * Install and register a new package.
- * @param db An opened pkgdb
- * @param path The path to the package archive file on the local disk
- * @return An error code.
+ * Test if a package dependency is already installed
+ * @param db An open pkgdb
+ * @param dep The dependency to check
+ * @return An error code
  */
 int pkg_add(struct pkgdb *db, const char *path, unsigned flags);
 
@@ -1000,7 +1015,7 @@ int pkg_jobs_new(struct pkg_jobs **jobs, pkg_jobs_t type, struct pkgdb *db);
 void pkg_jobs_free(struct pkg_jobs *jobs);
 
 /**
- * Add a pkg to the jobs queue.
+ * Add a pkg to the end of the jobs queue.
  * @return An error code.
  */
 int pkg_jobs_add(struct pkg_jobs *j, match_t match, char **argv, int argc);
@@ -1023,10 +1038,11 @@ int pkg_jobs_count(struct pkg_jobs *jobs);
 int pkg_jobs(struct pkg_jobs *jobs, struct pkg **pkg);
 
 /**
- * Apply the jobs in the queue (fetch and install).
+ * Apply the jobs in the queue (fetch, deinstall and install).
+ * cachedir == NULL implies use default from PKG_CONFIG.
  * @return An error code.
  */
-int pkg_jobs_apply(struct pkg_jobs *jobs);
+int pkg_jobs_apply(struct pkg_jobs *jobs, const char *cachedir);
 
 /**
  * Archive formats options.

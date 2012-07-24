@@ -182,6 +182,7 @@ exec_delete(int argc, char **argv)
 		if (dry_run)
 			yes = false;
 	}
+
 	if (!yes || (retcode = pkg_jobs_apply(jobs)) != EPKG_OK)
 		goto cleanup;
 

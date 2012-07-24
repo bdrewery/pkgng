@@ -34,6 +34,7 @@
 #include <sys/types.h>
 
 #include <archive.h>
+#include <archive_entry.h>
 #include <sqlite3.h>
 #include <openssl/sha.h>
 #include <openssl/md5.h>
@@ -118,6 +119,7 @@ struct pkg {
 	struct pkg_shlib *shlibs_required;
 	struct pkg_shlib *shlibs_provided;
 	struct pkg_abstract *abstract_metadata;
+	struct pkg_archive *archive;
 	unsigned       	 flags;
 	int64_t		 rowid;
 	int64_t		 time;
@@ -249,6 +251,13 @@ struct pkg_abstract {
 	UT_hash_handle	 hh;
 };
 
+struct pkg_archive {
+	char path[MAXPATHLEN + 1];
+	struct archive *archive;
+	struct archive_entry *entry;
+};
+
+
 /* sql helpers */
 
 typedef struct _sql_prstmt {
@@ -269,6 +278,19 @@ typedef enum {
 } pkg_rc_attr;
 
 /**
+ * Install and register a new package.
+ * @param db An opened pkgdb
+ * @param pkg A pkg struct corresponding to an open pkg archive
+ * @return An error code.
+ */
+int pkg_add(struct pkgdb *db, struct pkg *pkg, int flags);
+
+#define PKG_ADD_UPGRADE (1 << 0)
+#define PKG_ADD_USE_UPGRADE_SCRIPTS (1 << 1)
+#define PKG_ADD_AUTOMATIC (1 << 2)
+#define PKG_ADD_FORCE (1 << 3)
+
+/**
  * Remove and unregister the package.
  * @param pkg An installed package to delete
  * @param db An opened pkgdb
@@ -276,7 +298,7 @@ typedef enum {
  * required by other packages.
  * @return An error code.
  */
-int pkg_delete(struct pkg *pkg, struct pkgdb *db, unsigned flags);
+int pkg_delete(struct pkgdb *db, struct pkg *pkg, unsigned flags);
 #define PKG_DELETE_FORCE (1<<0)
 #define PKG_DELETE_UPGRADE (1<<1)
 #define PKG_DELETE_NOSCRIPT (1<<2)
@@ -290,9 +312,6 @@ int pkg_script_run(struct pkg *, pkg_script type);
 
 int pkg_add_user_group(struct pkg *pkg);
 int pkg_delete_user_group(struct pkgdb *db, struct pkg *pkg);
-
-int pkg_open2(struct pkg **p, struct archive **a, struct archive_entry **ae,
-	      const char *path);
 
 void pkg_list_free(struct pkg *, pkg_list);
 
@@ -324,6 +343,9 @@ int pkg_jobs_resolv(struct pkg_jobs *jobs);
 
 int pkg_shlib_new(struct pkg_shlib **);
 void pkg_shlib_free(struct pkg_shlib *);
+
+int pkg_archive_new(struct pkg_archive **);
+void pkg_archive_free(struct pkg_archive *);
 
 struct packing;
 
