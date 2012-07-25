@@ -108,7 +108,7 @@ download_missing_dependencies(struct pkgdb *db, struct pkg_jobs *jobs,
 		return (EPKG_OK);
 
 	while (pkg_deps(this_pkg, &dep) == EPKG_OK) {
-		if (pkg_is_installed(db, pkg_dep_origin(dep)) == EPKG_OK)
+		if (pkgdb_pkg_is_installed(db, pkg_dep_origin(dep)) == EPKG_OK)
 			continue;
 
 		if (pkg_jobs_already_queued(jobs, pkg_dep_origin(dep)))

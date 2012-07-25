@@ -62,6 +62,7 @@ check_deps(struct pkgdb *db, struct pkg *p, struct deps_head *dh, bool noinstall
 	struct pkg_dep *dep = NULL;
 	char *name, *version, *origin;
 	int nbpkgs = 0;
+	int ret;
 
 	assert(db != NULL);
 	assert(p != NULL);

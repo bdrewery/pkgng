@@ -850,12 +850,12 @@ int pkg_try_installed(struct pkgdb *db, const char *origin,
 /**
  * @param db A pointer to a struct pkgdb object
  * @param origin Package origin
- * @return EPKG_OK if the package is installed,
- * and != EPKG_OK if the package is not installed or an error occurred
+ * @return EPKG_OK if the package is installed, EPKG_END is the
+ * package is not installed, or EPKG_FATAL if an error occured.
  * Match will be case sensitive or insensitive depending on
  * pkgdb_case_sensitive()
  */
-int pkg_is_installed(struct pkgdb *db, const char *origin);
+int pkgdb_pkg_is_installed(struct pkgdb *db, const char *origin);
 
 /**
  * Create a repository database.

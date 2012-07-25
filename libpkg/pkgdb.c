@@ -1554,6 +1554,40 @@ pkgdb_is_dir_used(struct pkgdb *db, const char *dir, int64_t *res)
 }
 
 int
+pkgdb_pkg_is_installed(struct pkgdb *db, const char *origin)
+{
+	sqlite3_stmt	*stmt;
+	int		 ret;
+
+	const char	 sql[] = ""
+		"SELECT count(id) FROM packages WHERE origin = ?1";
+
+	assert(db != NULL);
+
+	if (sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL) != SQLITE_OK) {
+		ERROR_SQLITE(db->sqlite);
+		return (EPKG_FATAL);
+	}
+
+	sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_TRANSIENT);
+
+	if (sqlite3_step(stmt) != SQLITE_ROW) {
+		ERROR_SQLITE(db->sqlite);
+		sqlite3_finalize(stmt);
+		return (EPKG_FATAL);
+	}
+
+	if (sqlite3_column_int64(stmt, 0) == 0)
+		ret = EPKG_END;	/* Not installed */
+	else
+		ret = EPKG_OK; /* Installed */
+
+	sqlite3_finalize(stmt);
+
+	return (ret);
+}
+
+int
 pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg)
 {
 	sqlite3_stmt	*stmt = NULL;
