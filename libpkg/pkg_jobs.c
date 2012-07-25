@@ -548,12 +548,15 @@ pkg_jobs_deinstall(struct pkg_jobs *j)
 int
 pkg_jobs_apply(struct pkg_jobs *j, const char *cachedir)
 {
-	int rc;
+	int		 rc;
+	const char	*cachedir;
 
 	if (!j->solved) {
 		pkg_emit_error("The jobs hasn't been solved");
 		return (EPKG_FATAL);
 	}
+
+	pkg_config_string(PKG_CONFIG_CACHEDIR, &cachedir);
 
 	switch (j->type) {
 	case PKG_JOBS_INSTALL:
