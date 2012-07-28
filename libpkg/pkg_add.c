@@ -165,13 +165,6 @@ pkg_add(struct pkgdb *db, struct pkg *pkg, unsigned flags)
 	int		 retcode = EPKG_OK;
 	int		 ret;
 
-#if 0
-	struct pkg_dep	*dep = NULL;
-	const char	*basedir;
-	const char	*ext;
-	char		 dpath[MAXPATHLEN + 1];
-#endif
-
 	assert(db != NULL);
 	assert(pkg != NULL);
 	assert(pkg->type == PKG_FILE);
@@ -237,42 +230,6 @@ pkg_add(struct pkgdb *db, struct pkg *pkg, unsigned flags)
 		retcode = ret;
 		goto cleanup;
 	}
-
-#if 0				/* Do all this much earlier */
-	/*
-	 * Check for dependencies
-	 */
-
-	basedir = dirname(path);
-	if ((ext = strrchr(path, '.')) == NULL) {
-		pkg_emit_error("%s has no extension", path);
-		retcode = EPKG_FATAL;
-		goto cleanup;
-	}
-
-	while (pkg_deps(pkg, &dep) == EPKG_OK) {
-		if (pkg_is_installed(db, pkg_dep_origin(dep)) != EPKG_OK) {
-			const char *dep_name = pkg_dep_name(dep);
-			const char *dep_ver = pkg_dep_version(dep);
-
-			snprintf(dpath, sizeof(dpath), "%s/%s-%s%s", basedir,
-			    dep_name, dep_ver, ext);
-
-			if ((flags & PKG_ADD_UPGRADE) == 0 &&
-			    access(dpath, F_OK) == 0) {
-				ret = pkg_add(db, dpath, PKG_ADD_AUTOMATIC);
-				if (ret != EPKG_OK) {
-					retcode = EPKG_FATAL;
-					goto cleanup;
-				}
-			} else {
-				retcode = EPKG_FATAL;
-				pkg_emit_missing_dep(pkg, dep);
-				goto cleanup;
-			}
-		}
-	}
-#endif
 
 	/* register the package before installing it in case there are
 	 * problems that could be caught here. */
