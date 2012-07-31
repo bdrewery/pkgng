@@ -497,7 +497,7 @@ pkg_jobs_install(struct pkg_jobs *j, const char *cachedir)
 		if (automatic)
 			flags |= PKG_ADD_AUTOMATIC;
 
-		if (pkg_add(j->db, newpkg, flags) != EPKG_OK) {
+		if (pkg_add_carefully(j->db, newpkg, flags) != EPKG_OK) {
 			pkgdb_transaction_rollback(j->db->sqlite, "upgrade");
 			goto cleanup;
 		}
