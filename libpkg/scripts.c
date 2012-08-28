@@ -48,7 +48,10 @@ pkg_script_run(struct pkg * const pkg, pkg_script type)
 	int error, pstat;
 	pid_t pid;
 	const char *name, *prefix, *version;
-	const char *argv[4];
+	const char *argv[3];
+	int ret = EPKG_OK;
+	int pdes[2] = {-1, -1};
+	posix_spawn_file_actions_t action;
 
 	struct {
 		const char * const arg;
@@ -64,11 +67,20 @@ pkg_script_run(struct pkg * const pkg, pkg_script type)
 		{"POST-DEINSTALL", PKG_SCRIPT_DEINSTALL, PKG_SCRIPT_POST_DEINSTALL},
 	};
 
+	if (pipe(pdes) < 0) {
+		ret = EPKG_FATAL;
+		goto cleanup;
+	}
+
+	posix_spawn_file_actions_init(&action);
+	posix_spawn_file_actions_adddup2(&action, pdes[0], STDIN_FILENO);
+	posix_spawn_file_actions_addclose(&action, pdes[1]);
+
 	pkg_get(pkg, PKG_PREFIX, &prefix, PKG_NAME, &name, PKG_VERSION, &version);
 
 	argv[0] = "sh";
-	argv[1] = "-c";
-	argv[3] = NULL;
+	argv[1] = "-s";
+	argv[2] = NULL;
 
 	for (i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
 		if (map[i].a == type)
@@ -96,34 +108,41 @@ pkg_script_run(struct pkg * const pkg, pkg_script type)
 			sbuf_cat(script_cmd, "\n");
 			sbuf_cat(script_cmd, pkg_script_get(pkg, j));
 			sbuf_finish(script_cmd);
-			argv[2] = sbuf_get(script_cmd);
 
-			if ((error = posix_spawn(&pid, _PATH_BSHELL, NULL,
+			if ((error = posix_spawn(&pid, _PATH_BSHELL, &action,
 			    NULL, __DECONST(char **, argv),
 			    environ)) != 0) {
 				errno = error;
 				pkg_emit_errno("Cannot run script",
 				    map[i].arg);
-				sbuf_delete(script_cmd);
-				return (EPKG_OK);
+				goto cleanup;
 			}
+
+			write(pdes[1], sbuf_get(script_cmd), sbuf_len(script_cmd));
+			close(pdes[1]);
 
 			unsetenv("PKG_PREFIX");
 
 			while (waitpid(pid, &pstat, 0) == -1) {
 				if (errno != EINTR)
-					return (EPKG_OK);
+					goto cleanup;
 			}
 
 			if (WEXITSTATUS(pstat) != 0) {
 				pkg_emit_error("%s script failed", map[i].arg);
-				return (EPKG_OK);
+				goto cleanup;
 			}
 		}
 	}
 
-	sbuf_delete(script_cmd);
+cleanup:
 
-	return (EPKG_OK);
+	sbuf_delete(script_cmd);
+	if (pdes[0] != -1)
+		close(pdes[0]);
+	if (pdes[1] != -1)
+		close(pdes[1]);
+
+	return (ret);
 }
 
