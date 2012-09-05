@@ -283,7 +283,7 @@ typedef enum {
  * @param pkg A pkg struct corresponding to an open pkg archive
  * @return An error code.
  */
-int pkg_add(struct pkgdb *db, struct pkg *pkg, int flags);
+int pkg_add_carefully(struct pkgdb *db, struct pkg *pkg, int flags);
 
 #define PKG_ADD_UPGRADE (1 << 0)
 #define PKG_ADD_USE_UPGRADE_SCRIPTS (1 << 1)

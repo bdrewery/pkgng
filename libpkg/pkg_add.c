@@ -151,8 +151,13 @@ cleanup:
 	return (retcode);
 }
 
-int
-pkg_add(struct pkgdb *db, struct pkg *pkg, unsigned flags)
+/* 
+ * Install pkg from an archive file to the filesystem.  This just
+ * installs the package, come what may: all checking and other
+ * pre-install tests should be done prior to calling.
+ */
+static int
+pkg_add(struct pkgdb *db, struct pkg *pkg)
 {
 	const char	*arch;
 	const char	*myarch;
@@ -167,7 +172,7 @@ pkg_add(struct pkgdb *db, struct pkg *pkg, unsigned flags)
 
 	assert(db != NULL);
 	assert(pkg != NULL);
-	assert(pkg->type == PKG_FILE);
+	assert((pkg->type & PKG_FILE) != 0);
 
 	if (!pkg_archive_is_open(pkg))
 		return (EPKG_FATAL);
@@ -181,7 +186,27 @@ pkg_add(struct pkgdb *db, struct pkg *pkg, unsigned flags)
 
 	if (pkg->archive->entry == NULL)
 		extract = false;
-	
+
+
+
+	return (retcode);
+}
+
+
+int
+pkg_add_carefully(struct pkgdb *db, struct pkg *pkg, int flags)
+{
+	const char	*arch;
+	const char	*myarch;
+	const char	*origin;
+	bool		 extract = true;
+	bool		 handle_rc = false;
+	int		 retcode = EPKG_OK;
+	int		 ret;
+
+	assert(db != NULL);
+	assert(pkg != NULL);
+
 	if ((flags & PKG_ADD_UPGRADE) == 0)
 		pkg_emit_install_begin(pkg);
 
@@ -300,3 +325,4 @@ pkg_add(struct pkgdb *db, struct pkg *pkg, unsigned flags)
 
 	return (retcode);
 }
+
