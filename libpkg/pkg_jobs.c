@@ -286,13 +286,15 @@ pkg_jobs_resolv(struct pkg_jobs *j)
 		struct pkgdb_it *it;
 		char *v1, *v2;
 		char *n1, *n2;
+		bool a = true;
 		pkg_get(p1, PKG_ORIGIN, &key, PKG_VERSION, &v1, PKG_NAME, &n1);
 		if ((it = pkgdb_query(j->db, key, MATCH_EXACT)) != NULL) {
 			p3 = NULL;
 			while (pkgdb_it_next(it, &p3, PKG_LOAD_BASIC|PKG_LOAD_OPTIONS) == EPKG_OK) {
-				pkg_get(p3, PKG_VERSION, &v2, PKG_NAME, &n2);
-				pkg_set(p1, PKG_NEWVERSION, v1);
-				pkg_set(p1, PKG_VERSION, v2);
+				pkg_get(p3, PKG_VERSION, &v2, PKG_NAME, &n2, PKG_AUTOMATIC, &a);
+				pkg_set(p1, PKG_NEWVERSION, v1,
+				    PKG_VERSION, v2,
+				    PKG_AUTOMATIC, a);
 
 				if (strcmp(n1, n2) != 0)
 					break;
