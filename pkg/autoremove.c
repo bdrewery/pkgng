@@ -102,7 +102,7 @@ exec_autoremove(int argc, char **argv)
 		pkg_get(pkg, PKG_FLATSIZE, &flatsize, PKG_NEW_FLATSIZE, &newflatsize);
 		oldsize += flatsize;
 		newsize += newflatsize;
-		pkg_jobs_add(jobs, pkg);
+		/*pkg_jobs_add(jobs, pkg);*/
 		pkg = NULL;
 	}
 

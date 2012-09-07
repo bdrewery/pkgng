@@ -114,7 +114,7 @@ exec_upgrade(int argc, char **argv)
 	}
 
 	while (pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC|PKG_LOAD_DEPS) == EPKG_OK) {
-		pkg_jobs_add(jobs, pkg);
+//		pkg_jobs_add(jobs, pkg);
 		pkg = NULL;
 	}
 	pkgdb_it_free(it);

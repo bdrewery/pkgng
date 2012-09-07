@@ -53,7 +53,6 @@ int
 exec_install(int argc, char **argv)
 {
 	struct pkg *pkg = NULL;
-	struct pkgdb_it *it = NULL;
 	struct pkgdb *db = NULL;
 	struct pkg_jobs *jobs = NULL;
 	const char *reponame = NULL;
@@ -130,24 +129,17 @@ exec_install(int argc, char **argv)
 	}
 
 	if (pkg_jobs_new(&jobs, PKG_JOBS_INSTALL, db, force, dry_run)
-	    != EPKG_OK) {
-		goto cleanup;
-	}
-
-	if ((it = pkgdb_query_installs(db, match, argc, argv, reponame,
-	    force, recursive)) == NULL)
+	    != EPKG_OK)
 		goto cleanup;
 
-	while (pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC|PKG_LOAD_DEPS) ==
-	    EPKG_OK) {
-		if (automatic)
-			pkg_set(pkg, PKG_AUTOMATIC, true);
-		pkg_jobs_add(jobs, pkg);
-		pkg = NULL;
-	}
-	pkgdb_it_free(it);
+	if (pkg_jobs_add(jobs, match, argc, argv, reponame, automatic,
+	    recursive) != EPKG_OK)
+		goto cleanup;
 
 	if (pkg_jobs_is_empty(jobs))
+		goto cleanup;
+
+	if (pkg_jobs_resolv(jobs) != EPKG_OK)
 		goto cleanup;
 
 	/* print a summary before applying the jobs */

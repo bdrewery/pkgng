@@ -130,7 +130,7 @@ exec_delete(int argc, char **argv)
 			if (strcmp(origin, "ports-mgmt/pkg") == 0)
 				haspkg = true;
 		}
-		pkg_jobs_add(jobs, pkg);
+		//pkg_jobs_add(jobs, pkg);
 		pkg = NULL;
 	}
 	if (haspkg && !force) {

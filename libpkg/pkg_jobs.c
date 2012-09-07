@@ -58,9 +58,9 @@ pkg_jobs_new(struct pkg_jobs **j, pkg_jobs_t t, struct pkgdb *db, bool force,
 		return (EPKG_FATAL);
 	}
 
-	STAILQ_INIT(&(*j)->jobs);
 	(*j)->db = db;
 	(*j)->type = t;
+
 	if (dry_run)
 		(*j)->flags |= PKG_JOB_FLAGS_DRY_RUN;
 	if (force)
@@ -72,39 +72,264 @@ pkg_jobs_new(struct pkg_jobs **j, pkg_jobs_t t, struct pkgdb *db, bool force,
 void
 pkg_jobs_free(struct pkg_jobs *j)
 {
-	struct pkg *p;
-
 	if (j == NULL)
 		return;
 
 	if ((j->flags & PKG_JOB_FLAGS_DRY_RUN) == 0)
 		pkgdb_unlock(j->db);
 
-	while (!STAILQ_EMPTY(&j->jobs)) {
-		p = STAILQ_FIRST(&j->jobs);
-		STAILQ_REMOVE_HEAD(&j->jobs, next);
-		pkg_free(p);
-	}
+	HASH_FREE(j->jobs, pkg, pkg_free);
 	free(j);
 }
 
+static int
+pkg_jobs_add_pattern(struct pkg_jobs *j, const char *pattern, match_t match, bool automatic, const char *reponame)
+{
+	struct pkgdb_it *it = NULL;
+	struct pkg *pkg;
+	struct pkg_dep *d;
+	const char *key;
+
+	if (match == MATCH_EXACT) {
+		HASH_FIND_STR(j->jobs, __DECONST(char *, pattern), pkg);
+		if (pkg != NULL)
+			return (EPKG_OK);
+	}
+	if ((it = pkgdb_rquery(j->db, pattern, match, reponame)) == NULL)
+		return (EPKG_FATAL);
+
+	while (pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC|PKG_LOAD_DEPS|PKG_LOAD_OPTIONS) == EPKG_OK) {
+		if (automatic)
+			pkg_set(pkg, PKG_AUTOMATIC, automatic);
+		pkg_get(pkg, PKG_ORIGIN, &key);
+		HASH_ADD_KEYPTR(hh, j->jobs, key, strlen(key), pkg);
+		d = NULL;
+		while (pkg_deps(pkg, &d) == EPKG_OK) {
+			key = pkg_dep_get(d, PKG_DEP_ORIGIN);
+			if (pkg_jobs_add_pattern(j, key, MATCH_EXACT, false, reponame) != EPKG_OK) {
+				pkgdb_it_free(it);
+				return (EPKG_FATAL);
+			}
+		}
+	}
+	pkgdb_it_free(it);
+
+	return (EPKG_OK);
+}
+
 int
+pkg_jobs_add(struct pkg_jobs *j, match_t match, int nbpkgs, char **pkgs, const char *reponame, bool automatic, __unused bool recursive)
+{
+	int i;
+
+	assert(j != NULL);
+
+	if (j->resolved == 1) {
+		pkg_emit_error("This job has already been resolved avoid doing it a second time");
+		return (EPKG_FATAL);
+	}
+
+	if (j->type == PKG_JOBS_UPGRADE) {
+		pkg_emit_error("This is an upgrade job, no packages can be added");
+		return (EPKG_FATAL);
+	}
+
+	for (i = 0; i < nbpkgs; i++) {
+		if (pkg_jobs_add_pattern(j, pkgs[i], match, automatic, reponame) != EPKG_OK)
+			return (EPKG_FATAL);
+	}
+
+	return (EPKG_OK);
+}
+
+static struct pkg_jobs_node *
+get_node(struct pkg_jobs *j, const char *name, int create)
+{
+	struct pkg_jobs_node *n;
+
+	HASH_FIND_STR(j->nodes, __DECONST(char *, name), n);
+	if (n != NULL)
+		return (n);
+
+	if (create == 0)
+		return (NULL);
+
+	n = calloc(1, sizeof(struct pkg_jobs_node));
+	HASH_ADD_KEYPTR(hh, j->nodes, __DECONST(char *, name), strlen(name), n);
+	return (n);
+}
+
+static void
+remove_node(struct pkg_jobs *j, struct pkg_jobs_node *n)
+{
+	struct pkg_jobs_node *np;
+	size_t i;
+	char *key;
+
+	assert(n->nrefs == 0);
+
+	if (n->pkg != NULL) {
+		pkg_get(n->pkg, PKG_ORIGIN, &key);
+		HASH_ADD_KEYPTR(hh, j->jobs, key, strlen(key), n->pkg);
+	}
+
+	HASH_DEL(j->nodes, n);
+
+	for (i = 0; i < n->parents_len; i++) {
+		np = n->parents[i];
+		np->nrefs--;
+	}
+	free(n->parents);
+	free(n);
+}
+
+static void
+add_parent(struct pkg_jobs_node *n, struct pkg_jobs_node *p)
+{
+	p->nrefs++;
+
+	if (n->parents_len == n->parents_cap) {
+		if (n->parents_cap == 0)
+			n->parents_cap = 5;
+		else
+			n->parents_cap *= 2;
+		n->parents = realloc(n->parents, n->parents_cap *
+				sizeof(struct pkg_jobs_node));
+		}
+	n->parents[n->parents_len] = p;
+	n->parents_len++;
+}
+
+static int
+add_dep(struct pkg_jobs *j, struct pkg_jobs_node *n)
+{
+	struct pkg_dep *dep = NULL;
+	struct pkg_jobs_node *ndep;
+	int errs = 0;
+
+
+	if (n->pkg == NULL)
+		return (0);
+
+	while (pkg_deps(n->pkg, &dep) != EPKG_END) {
+		ndep = get_node(j, pkg_dep_get(dep, PKG_DEP_ORIGIN), 1);
+		if (ndep->pkg == NULL) {
+				pkg_emit_missing_dep(n->pkg, dep);
+				errs++;
+		}
+		add_parent(ndep, n);
+	}
+
+	return (errs);
+}
+
+/*static void
+add_rdep(struct pkg_jobs *j, struct pkg_jobs_node *n)
+{
+	struct pkg_jobs_node *nrdep;
+	struct pkg_dep *rdep = NULL;
+
+	pkgdb_loadrdeps(j->db, n->pkg);
+
+	while (pkg_rdeps(n->pkg, &rdep) == EPKG_OK) {
+		nrdep = get_node(j, pkg_dep_get(rdep, PKG_DEP_ORIGIN), 0);
+		if (nrdep != NULL)
+			add_parent(nrdep, n);
+	}
+}
+*/
+
+int
+pkg_jobs_resolv(struct pkg_jobs *j)
+{
+	struct pkg_jobs_node *n, *tmp;
+	struct pkg *p1, *p2, *p3;
+	char *key;
+	int errs = 0;
+
+	assert(j != NULL);
+
+	if (j->resolved == 1)
+		return (EPKG_OK);
+
+	/* Create nodes and remove jobs form the queue */
+	HASH_ITER(hh, j->jobs, p1, p2) {
+		pkg_get(p1, PKG_ORIGIN, &key);
+		n = get_node(j, key, 1);
+		n->pkg = p1;
+	}
+	HASH_CLEAR(hh, j->jobs);
+
+	/* Add dependencies into nodes */
+	HASH_ITER(hh, j->nodes, n, tmp) {
+		if (j->type == PKG_JOBS_INSTALL ||
+		    j->type == PKG_JOBS_UPGRADE ||
+		    j->type == PKG_JOBS_FETCH)
+			errs += add_dep(j, n);
+/*		if (j->type == PKG_JOBS_DEINSTALL)
+			add_rdep(j, n);*/
+	}
+
+	if (errs != 0)
+		return (EPKG_FATAL);
+
+	/* Resolv !*/
+	/* Here should be handled handless looping */
+	do {
+		HASH_ITER(hh, j->nodes, n, tmp) {
+			if (n->nrefs == 0)
+				remove_node(j, n);
+		}
+	} while (HASH_COUNT(j->nodes) != 0);
+
+	HASH_ITER(hh, j->jobs, p1, p2) {
+		struct pkgdb_it *it;
+		char *v1, *v2;
+		char *n1, *n2;
+		pkg_get(p1, PKG_ORIGIN, &key, PKG_VERSION, &v1, PKG_NAME, &n1);
+		if ((it = pkgdb_query(j->db, key, MATCH_EXACT)) != NULL) {
+			p3 = NULL;
+			while (pkgdb_it_next(it, &p3, PKG_LOAD_BASIC|PKG_LOAD_OPTIONS) == EPKG_OK) {
+				pkg_get(p3, PKG_VERSION, &v2, PKG_NAME, &n2);
+				pkg_set(p1, PKG_NEWVERSION, v1);
+				pkg_set(p1, PKG_VERSION, v2);
+
+				if (strcmp(n1, n2) != 0)
+					break;
+				if (pkg_version_cmp(v1, v2) > 0)
+					break;
+
+				HASH_DEL(j->jobs, p1);
+			}
+		}
+	}
+	j->resolved = 1;
+	return (EPKG_OK);
+}
+
+/*int
 pkg_jobs_add(struct pkg_jobs *j, struct pkg *pkg)
 {
 	assert(j != NULL);
 	assert(pkg != NULL);
 
-	STAILQ_INSERT_TAIL(&j->jobs, pkg, next);
+	if (j->type == PKG_JOBS_UPGRADE) {
+		pkg_emit_error("This is an upgrade job, no packages can be added");
+		return (EPKG_FATAL);
+	}
+	char *key;
+	pkg_get(pkg, PKG_ORIGIN, &key);
+	HASH_ADD_KEYPTR(hh, j->jobs, key, strlen(key), pkg);
 
 	return (EPKG_OK);
-}
+} */
 
 int
 pkg_jobs_is_empty(struct pkg_jobs *j)
 {
 	assert(j != NULL);
 
-	return (STAILQ_EMPTY(&j->jobs));
+	return (HASH_COUNT(j->jobs) == 0);
 }
 
 int
@@ -112,15 +337,7 @@ pkg_jobs(struct pkg_jobs *j, struct pkg **pkg)
 {
 	assert(j != NULL);
 
-	if (*pkg == NULL)
-		*pkg = STAILQ_FIRST(&j->jobs);
-	else
-		*pkg = STAILQ_NEXT(*pkg, next);
-
-	if (*pkg == NULL)
-		return (EPKG_END);
-	else
-		return (EPKG_OK);
+	HASH_NEXT(j->jobs, (*pkg));
 }
 
 static int

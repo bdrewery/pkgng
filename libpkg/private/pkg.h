@@ -100,6 +100,7 @@ struct pkg {
 	lic_t		 licenselogic;
 	pkg_t		 type;
 	STAILQ_ENTRY(pkg) next;
+	UT_hash_handle	 hh;
 };
 
 struct pkg_dep {
@@ -147,10 +148,12 @@ struct pkg_option {
 };
 
 struct pkg_jobs {
-	STAILQ_HEAD(jobs, pkg) jobs;
 	struct pkgdb	*db;
 	pkg_jobs_t	 type;
 	unsigned	 flags;
+	struct pkg	*jobs;
+	int		 resolved;
+	struct pkg_jobs_node *nodes;
 };
 
 typedef enum _pkg_job_flags {
@@ -164,7 +167,7 @@ struct pkg_jobs_node {
 	struct pkg_jobs_node	**parents; /* rdeps */
 	size_t		 parents_len;
 	size_t		 parents_cap;
-	LIST_ENTRY(pkg_jobs_node) entries;
+	UT_hash_handle	hh;
 };
 
 struct pkg_user {
@@ -254,8 +257,6 @@ void pkg_user_free(struct pkg_user *);
 
 int pkg_group_new(struct pkg_group **);
 void pkg_group_free(struct pkg_group *);
-
-int pkg_jobs_resolv(struct pkg_jobs *jobs);
 
 int pkg_shlib_new(struct pkg_shlib **);
 void pkg_shlib_free(struct pkg_shlib *);

@@ -125,7 +125,7 @@ exec_fetch(int argc, char **argv)
 		goto cleanup;
 
 	while (pkgdb_it_next(it, &pkg, flags) == EPKG_OK) {
-		pkg_jobs_add(jobs, pkg);
+		//pkg_jobs_add(jobs, pkg);
 		pkg = NULL;
 	}
 	

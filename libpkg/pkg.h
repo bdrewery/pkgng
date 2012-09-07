@@ -238,6 +238,7 @@ typedef enum {
 } pkg_script;
 
 typedef enum _pkg_jobs_t {
+	PKG_JOBS_UPGRADE,
 	PKG_JOBS_INSTALL,
 	PKG_JOBS_DEINSTALL,
 	PKG_JOBS_FETCH,
@@ -840,6 +841,8 @@ int pkg_add(struct pkgdb *db, const char *path, unsigned flags);
 int pkg_jobs_new(struct pkg_jobs **jobs, pkg_jobs_t type, struct pkgdb *db,
 		 bool force, bool dry_run);
 
+int pkg_jobs_resolv(struct pkg_jobs *jobs);
+
 /**
  * Free a pkg_jobs
  */
@@ -849,7 +852,8 @@ void pkg_jobs_free(struct pkg_jobs *jobs);
  * Add a pkg to the jobs queue.
  * @return An error code.
  */
-int pkg_jobs_add(struct pkg_jobs *jobs, struct pkg *pkg);
+/*int pkg_jobs_add(struct pkg_jobs *jobs, struct pkg *pkg);*/
+int pkg_jobs_add(struct pkg_jobs *j, match_t match, int nbpkgs, char **pkgs, const char *reponame, bool automatic, bool recursive);
 
 /**
  * Returns true if there are no jobs.

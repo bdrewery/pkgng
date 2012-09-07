@@ -525,6 +525,7 @@ print_jobs_summary(struct pkg_jobs *jobs, pkg_jobs_t type, const char *msg, ...)
 
 		switch (type) {
 		case PKG_JOBS_INSTALL:
+		case PKG_JOBS_UPGRADE:
 			dlsize += pkgsize;
 			snprintf(path, MAXPATHLEN, "%s/%s", cachedir, pkgrepopath);
 			if (stat(path, &st) != -1)
@@ -580,6 +581,9 @@ print_jobs_summary(struct pkg_jobs *jobs, pkg_jobs_t type, const char *msg, ...)
 		case PKG_JOBS_FETCH:
 			/* nothing to report here */
 			break;
+		case PKG_JOBS_UPGRADE:
+			printf("\nThe upgrade will free %s\n", size);
+			break;
 		}
 	} else if (newsize > oldsize) {
 		humanize_number(size, sizeof(size), newsize - oldsize, "B", HN_AUTOSCALE, 0);
@@ -587,6 +591,9 @@ print_jobs_summary(struct pkg_jobs *jobs, pkg_jobs_t type, const char *msg, ...)
 		switch (type) {
 		case PKG_JOBS_INSTALL:
 			printf("\nThe installation will require %s more space\n", size);
+			break;
+		case PKG_JOBS_UPGRADE:
+			printf("\nThe upgrade will require %s more space\n", size);
 			break;
 		case PKG_JOBS_DEINSTALL:
 			printf("\nThe deinstallation will require %s more space\n", size);
