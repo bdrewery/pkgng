@@ -15,7 +15,7 @@
 .\"     @(#)pkg.1
 .\" $FreeBSD$
 .\"
-.Dd August 29, 2012
+.Dd September 22, 2012
 .Dt PKG.CONF 5
 .Os
 .Sh NAME
@@ -99,7 +99,7 @@ This option when enabled will tell
 to work in multiple repositories mode.
 For example repositories
 definitions, please have a look at the sample configuration file.
-.It Cm PLIST_KEYWORS_DIR: string
+.It Cm PLIST_KEYWORDS_DIR: string
 < To be added >
 .It Cm PORTSDIR: string
 Specifies the location to the Ports directory.
@@ -111,20 +111,10 @@ This option is enabled by default, log all the
 installation/deinstallation/upgrade operation via syslog(3)
 .It Cm SHLIBS: boolean
 Analyse elf and track all shared libraries needed by the packages.
-This option is silently ignored by
-.Xr pkg-static 8
-since it relies on
-.Xr dlopen 3
-which is unavailable to statically linked programs.
 default: off
 .It Cm AUTODEPS: boolean
 Analyse the elf to add dependencies (shared libraries) that may have been
 forgotten by the maintainer.
-This option is silently ignored by
-.Xr pkg-static 8
-since it relies on
-.Xr dlopen 3
-which is unavailable to statically linked programs.
 default: off
 .It Cm ABI: string
 the abi of the package you want to install, by default the /bin/sh abi is used
@@ -142,6 +132,8 @@ when fetching the portaudit database.
 See
 .Xr pkg-audit 8
 for more information.
+.It Cm DEBUG_SCRIPTS: boolean
+Activate debug mode for scripts (aka set -x)
 .El
 .Sh ENVIRONMENT
 An environment variable with the same name as the option in the configuration
