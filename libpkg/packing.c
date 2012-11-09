@@ -45,12 +45,13 @@ struct packing {
 	struct archive *aread;
 	struct archive *awrite;
 	struct archive_entry_linkresolver *resolver;
+	char archive_path[MAXPATHLEN];
+	char archive_path_tmp[MAXPATHLEN];
 };
 
 int
 packing_init(struct packing **pack, const char *path, pkg_formats format)
 {
-	char archive_path[MAXPATHLEN];
 	const char *ext;
 
 	assert(pack != NULL);
@@ -74,13 +75,17 @@ packing_init(struct packing **pack, const char *path, pkg_formats format)
 			*pack = NULL;
 			return EPKG_FATAL; /* error set by _set_format() */
 		}
-		snprintf(archive_path, sizeof(archive_path), "%s.%s", path,
-		    ext);
+		snprintf((*pack)->archive_path, sizeof((*pack)->archive_path),
+		    "%s.%s", path, ext);
+		snprintf((*pack)->archive_path_tmp,
+		    sizeof((*pack)->archive_path_tmp), "%s.tmp",
+		    (*pack)->archive_path);
 
 		if (archive_write_open_filename(
-		    (*pack)->awrite, archive_path) != ARCHIVE_OK) {
+		    (*pack)->awrite,
+		    (*pack)->archive_path_tmp) != ARCHIVE_OK) {
 			pkg_emit_errno("archive_write_open_filename",
-			    archive_path);
+			    (*pack)->archive_path_tmp);
 			archive_read_finish((*pack)->aread);
 			archive_write_finish((*pack)->awrite);
 			*pack = NULL;
@@ -282,6 +287,11 @@ packing_finish(struct packing *pack)
 
 	archive_write_close(pack->awrite);
 	archive_write_finish(pack->awrite);
+
+	if ((rename(pack->archive_path_tmp, pack->archive_path)) == -1) {
+		pkg_emit_errno("rename", pack->archive_path);
+		return (EPKG_FATAL);
+	}
 
 	free(pack);
 
