@@ -34,6 +34,7 @@
 #include <fcntl.h>
 #include <fts.h>
 #include <string.h>
+#include <signal.h>
 
 #include "pkg.h"
 #include "private/event.h"
