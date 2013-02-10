@@ -83,7 +83,7 @@ pkg_update(const char *name, const char *packagesite, bool force)
 	sqlite3 *sqlite = NULL;
 	char *req = NULL;
 	const char *myarch;
-	int64_t res;
+	int64_t res, autoupdate_interval;
 	const char *tmpdir;
 	sqlite3_stmt *stmt;
 	const char sql[] = ""
@@ -121,7 +121,11 @@ pkg_update(const char *name, const char *packagesite, bool force)
 			 * repo.sqlite is always newer than repo.txz,
 			 * 1 minute should be enough.
 			 */
-			t += 60;
+			if (pkg_config_int64(PKG_CONFIG_REPO_AUTOUPDATE_INTERVAL, &autoupdate_interval) == EPKG_FATAL)
+				autoupdate_interval = 1;
+			printf("t: %d\n", t);
+			t += (60 * autoupdate_interval);
+			printf("t: %d\n", t);
 		}
 	}
 

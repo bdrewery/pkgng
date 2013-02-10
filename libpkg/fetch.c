@@ -209,6 +209,7 @@ pkg_fetch_file_to_fd(const char *url, int dest, time_t t)
 		}
 	}
 	if (t != 0) {
+		printf("R: %d\n", st.mtime);
 		if (st.mtime <= t) {
 			retcode = EPKG_UPTODATE;
 			goto cleanup;
