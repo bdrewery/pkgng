@@ -73,6 +73,7 @@ pkg_new(struct pkg **pkg, pkg_t type)
 	(*pkg)->locked = false;
 	(*pkg)->type = type;
 	(*pkg)->licenselogic = LICENSE_SINGLE;
+	(*pkg)->job_reason = 0;
 
 	return (EPKG_OK);
 }
@@ -99,6 +100,7 @@ pkg_reset(struct pkg *pkg, pkg_t type)
 	pkg->automatic = false;
 	pkg->locked = false;
 	pkg->licenselogic = LICENSE_SINGLE;
+	pkg->job_reason = 0;
 
 	pkg_list_free(pkg, PKG_LICENSES);
 	pkg_list_free(pkg, PKG_CATEGORIES);
@@ -212,6 +214,9 @@ pkg_vget(struct pkg const *const pkg, va_list ap)
 			break;
 		case PKG_ROWID:
 			*va_arg(ap, int64_t *) = pkg->rowid;
+			break;
+		case PKG_JOB_REASON:
+			*va_arg(ap, int64_t *) = pkg->job_reason;
 			break;
 		default:
 			va_arg(ap, void *); /* ignore */
@@ -327,6 +332,9 @@ pkg_vset(struct pkg *pkg, va_list ap)
 			break;
 		case PKG_ROWID:
 			pkg->rowid = va_arg(ap, int64_t);
+			break;
+		case PKG_JOB_REASON:
+			pkg->job_reason = va_arg(ap, int64_t);
 			break;
 		default:
 			/* XXX emit an error? */

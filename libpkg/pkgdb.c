@@ -108,6 +108,7 @@ static struct column_mapping {
 	{ "infos",	PKG_INFOS },
 	{ "rowid",	PKG_ROWID },
 	{ "id",		PKG_ROWID },
+	{ "job_reason", PKG_JOB_REASON },
 	{ "weight",	-1 },
 	{ NULL,		-1 }
 };
@@ -2973,7 +2974,7 @@ create_temporary_pkgjobs(sqlite3 *s)
 			"    newversion TEXT, newflatsize INTEGER, "
 			"    pkgsize INTEGER, cksum TEXT, repopath TEXT, "
 			"    automatic INTEGER, weight INTEGER, dbname TEXT, "
-			"    opts TEXT"
+			"    job_reason INTEGER DEFAULT 0, opts TEXT"
 			");");
 
 	return (ret);
@@ -3300,7 +3301,7 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo, bool all,
 		    "comment, desc, message, arch, maintainer, "
 		    "www, prefix, locked, flatsize, newversion, "
 		    "newflatsize, pkgsize, cksum, repopath, automatic, "
-		    "weight, '%s' AS dbname "
+		    "job_reason, weight, '%s' AS dbname "
 		"FROM pkgjobs ORDER BY weight DESC;";
 
 	/* All the local packages where there is a matching package in
@@ -3330,11 +3331,11 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo, bool all,
 		"INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, "
 			"comment, desc, arch, maintainer, www, prefix, "
 			"locked, flatsize, newversion, pkgsize, cksum, "
-			"repopath, automatic, opts) "
+			"repopath, automatic, job_reason, opts) "
 		"SELECT DISTINCT r.id, r.origin, r.name, r.version, "
 			"r.comment, r.desc, r.arch, r.maintainer, r.www, "
 			"r.prefix, 0, r.flatsize, NULL AS newversion, "
-			"r.pkgsize, r.cksum, r.path, 1, "
+			"r.pkgsize, r.cksum, r.path, 1, %d, "
 			"(SELECT GROUP_CONCAT(option) FROM (SELECT option "
 			"FROM '%s'.options WHERE package_id = r.id AND "
 			"value='on' ORDER BY option)) "
@@ -3350,12 +3351,13 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo, bool all,
 		"INSERT OR REPLACE INTO pkgjobs (pkgid, origin, name, "
 			"version, comment, desc, message, arch, maintainer, "
 			"www, prefix, locked, flatsize, newversion, "
-			"newflatsize, pkgsize, cksum, repopath, automatic) "
+			"newflatsize, pkgsize, cksum, repopath, automatic, "
+			"job_reason) "
 		"SELECT l.id, l.origin, l.name, l.version, l.comment, "
 			"l.desc, l.message, l.arch, l.maintainer, l.www, "
 			"l.prefix, l.locked, l.flatsize, r.version AS "
 			"newversion, r.flatsize AS newflatsize, r.pkgsize, "
-			"r.cksum, r.repopath, l.automatic "
+			"r.cksum, r.repopath, l.automatic, %d "
 		"FROM main.packages AS l, pkgjobs AS r "
 			"WHERE l.origin = r.origin "
 			"AND (PKGLT(l.version, r.version) "
@@ -3366,13 +3368,13 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo, bool all,
 			"version, comment, desc, message, arch, "
 			"maintainer, www, prefix, locked, flatsize, "
 			"newversion, newflatsize, pkgsize, "
-			"cksum, repopath, automatic) "
+			"cksum, repopath, automatic, job_reason) "
 		"SELECT l.id, l.origin, l.name, l.version, l.comment, "
 			"l.desc, l.message, l.arch, l.maintainer, l.www, "
 			"l.prefix, l.locked, l.flatsize, "
 			"r.version AS newversion, "
 			"r.flatsize AS newflatsize, r.pkgsize, r.cksum, "
-			"r.repopath, l.automatic "
+			"r.repopath, l.automatic, %d "
 		"FROM main.packages AS l, pkgjobs AS r "
 			"WHERE l.origin = r.origin";
 	}
@@ -3386,6 +3388,24 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo, bool all,
 			"AND d.package_id = p.id "
 			"AND p.origin = j.origin"
 		");";
+
+	/* FIXME: deal with locked */
+	const char	upwards_deps_sql[] = ""
+		"INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, "
+		    "version, comment, desc, arch, maintainer, www, "
+		    "newversion, newflatsize, "
+		    "prefix, flatsize, pkgsize, cksum, repopath, automatic, "
+		    "job_reason) "
+		"SELECT DISTINCT r.id, r.origin, r.name, r.version, "
+		    "r.comment, r.desc, r.arch, r.maintainer, r.www, "
+		    "r.version as newversion, r.flatsize AS newflatsize, "
+		    "r.prefix, l.flatsize, r.pkgsize, r.cksum, r.path, "
+		    "l.automatic, %d "
+		"FROM '%s'.packages AS r "
+		"INNER JOIN main.packages l ON (l.origin = r.origin) "
+		"WHERE r.id IN (SELECT d.package_id FROM '%s'.deps AS d, "
+		    "pkgjobs AS j WHERE d.origin = j.origin)";
+
 
 	if ((reponame = pkgdb_get_reponame(db, repo)) == NULL)
 		return (NULL);
@@ -3406,7 +3426,7 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo, bool all,
 			 "IS NOT NULL");
 
 		/* Remove packages already installed and in the latest
-		 * version */
+		 * version and with same options */
 		sql_exec(db->sqlite, "DELETE FROM pkgjobs WHERE "
 		    "(SELECT p.origin FROM main.packages AS p WHERE "
 		    "p.origin = pkgjobs.origin "
@@ -3417,10 +3437,21 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo, bool all,
 			 "WHERE package_id = p.id AND value = 'on' "
 			 "ORDER BY option)) IS pkgjobs.opts "
 			 ") IS NOT NULL;");
+		/* Update same versions as reason="options" */
+		sql_exec(db->sqlite, "UPDATE pkgjobs SET "
+		    " job_reason = %d "
+		    " WHERE pkgjobs.origin IN ("
+		    "    SELECT p.origin FROM main.packages AS p WHERE "
+		    "    p.origin = pkgjobs.origin "
+		    "    AND p.version = pkgjobs.version "
+		    "    AND p.name = pkgjobs.name "
+		    ");", PKG_JOBS_REASON_CHANGED_OPTIONS);
+		printf ("CHANGED: %d\n", sqlite3_changes(db->sqlite));
 	}
 
 	sbuf_reset(sql);
-	sbuf_printf(sql, pkgjobs_sql_2, reponame, reponame, reponame);
+	sbuf_printf(sql, pkgjobs_sql_2, PKG_JOBS_REASON_NEW_DEPENDENCY,
+	    reponame, reponame, reponame);
 	sbuf_finish(sql);
 
 	do {
@@ -3437,8 +3468,19 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo, bool all,
 			 "IS NOT NULL;");
 	}
 
+	/* Include all reverse dependencies */
+	/* FIXME: Need to do this on changed options too!! */
+	if (1) {
+		do {
+			sql_exec(db->sqlite, upwards_deps_sql,
+				 PKG_JOBS_REASON_UPDATED_DEPENDENCY, reponame,
+				 reponame);
+		} while (sqlite3_changes(db->sqlite) != 0);
+	}
+
 	/* Determine if there is an upgrade needed */
-	sql_exec(db->sqlite, pkgjobs_sql_3);
+	sql_exec(db->sqlite, pkgjobs_sql_3,
+	    all ? PKG_JOBS_REASON_ALL : PKG_JOBS_REASON_UPGRADED);
 
 	sbuf_reset(sql);
 	sbuf_printf(sql, weight_sql, reponame, reponame);

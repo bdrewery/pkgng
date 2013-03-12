@@ -341,6 +341,8 @@ set_repo_user_version(sqlite3 *sqlite, const char *database, int reposcver)
 		sqlite3_free(errmsg);
 		retcode = EPKG_FATAL;
 	}
+	int foo;
+	get_repo_user_version(sqlite, database, &foo);
 	return (retcode);
 }
 

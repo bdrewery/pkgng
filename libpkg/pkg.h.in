@@ -218,6 +218,7 @@ typedef enum {
 	PKG_LOCKED,
 	PKG_ROWID,
 	PKG_TIME,
+	PKG_JOB_REASON,
 } pkg_attr;
 
 typedef enum {
@@ -288,6 +289,16 @@ typedef enum _pkg_jobs_t {
 	PKG_JOBS_AUTOREMOVE,
 	PKG_JOBS_UPGRADE,
 } pkg_jobs_t;
+
+typedef enum _pkg_jobs_reason_t {
+	PKG_JOBS_REASON_UPGRADED = 1,
+	PKG_JOBS_REASON_NEW_DEPENDENCY,
+	PKG_JOBS_REASON_CHANGED_OPTIONS,
+	PKG_JOBS_REASON_UPDATED_DEPENDENCY,
+	PKG_JOBS_REASON_ALL, /* -f was used */
+	PKG_JOBS_REASON_REQUESTED, /* pkg install listed */
+	PKG_JOBS_REASON_ARCH_CHANGED, /* pkg upgrade after major upgrades */
+} pkg_jobs_reason_t;
 
 typedef enum _pkg_flags {
 	PKG_FLAG_NONE = 0,

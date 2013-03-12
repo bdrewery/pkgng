@@ -326,6 +326,14 @@ pkg_jobs_type(struct pkg_jobs *j)
 	return (j->type);
 }
 
+/*
+pkg_jobs_reason_t
+pkg_jobs_reason(struct pkg_jobs *j)
+{
+	return (j->reason);
+}
+*/
+
 int
 pkg_jobs(struct pkg_jobs *j, struct pkg **pkg)
 {

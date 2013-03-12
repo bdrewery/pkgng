@@ -553,6 +553,7 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 	char size[7];
 	va_list ap;
 	pkg_jobs_t type;
+	pkg_jobs_reason_t job_reason;
 
 	type = pkg_jobs_type(jobs);
 
@@ -570,7 +571,8 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 		pkg_get(pkg, PKG_NEWVERSION, &newversion, PKG_NAME, &name,
 		    PKG_VERSION, &version, PKG_FLATSIZE, &flatsize,
 		    PKG_NEW_FLATSIZE, &newflatsize, PKG_NEW_PKGSIZE, &pkgsize,
-		    PKG_REPOPATH, &pkgrepopath, PKG_LOCKED, &locked);
+		    PKG_REPOPATH, &pkgrepopath, PKG_LOCKED, &locked,
+		    PKG_JOB_REASON, &job_reason);
 
 		if (locked) {
 			printf("\tPackage %s-%s is locked ",
@@ -607,54 +609,57 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 
 		}
 
-		switch (type) {
-		case PKG_JOBS_INSTALL:
-		case PKG_JOBS_UPGRADE:
-			snprintf(path, MAXPATHLEN, "%s/%s", cachedir, pkgrepopath);
-			if (stat(path, &st) == -1 || pkgsize != st.st_size)
-				/* file looks corrupted (wrong size), assume a checksum mismatch will
-				   occur later and the file will be fetched from remote again */
-				dlsize += pkgsize;
+		if (job_reason) {
+		} else {
+			switch (type) {
+			case PKG_JOBS_INSTALL:
+			case PKG_JOBS_UPGRADE:
+				snprintf(path, MAXPATHLEN, "%s/%s", cachedir, pkgrepopath);
+				if (stat(path, &st) == -1 || pkgsize != st.st_size)
+					/* file looks corrupted (wrong size), assume a checksum mismatch will
+					   occur later and the file will be fetched from remote again */
+					dlsize += pkgsize;
 
-			if (newversion != NULL) {
-				switch (pkg_version_cmp(version, newversion)) {
-				case 1:
-					printf("\tDowngrading %s: %s -> %s\n", name, version, newversion);
-					break;
-				case 0:
-					printf("\tReinstalling %s-%s\n", name, version);
-					break;
-				case -1:
-					printf("\tUpgrading %s: %s -> %s\n", name, version, newversion);
-					break;
+				if (newversion != NULL) {
+					switch (pkg_version_cmp(version, newversion)) {
+					case 1:
+						printf("\tDowngrading %s: %s -> %s\n", name, version, newversion);
+						break;
+					case 0:
+						printf("\tReinstalling %s-%s\n", name, version);
+						break;
+					case -1:
+						printf("\tUpgrading %s: %s -> %s\n", name, version, newversion);
+						break;
+					}
+					oldsize += flatsize;
+					newsize += newflatsize;
+				} else {
+					newsize += flatsize;
+					printf("\tInstalling %s: %s\n", name, version);
 				}
+				break;
+			case PKG_JOBS_DEINSTALL:
+			case PKG_JOBS_AUTOREMOVE:
 				oldsize += flatsize;
 				newsize += newflatsize;
-			} else {
-				newsize += flatsize;
-				printf("\tInstalling %s: %s\n", name, version);
+				
+				printf("\t%s-%s\n", name, version);
+				break;
+			case PKG_JOBS_FETCH:
+				dlsize += pkgsize;
+				snprintf(path, MAXPATHLEN, "%s/%s", cachedir, pkgrepopath);
+				if (stat(path, &st) != -1)
+					oldsize = st.st_size;
+				else
+					oldsize = 0;
+				dlsize -= oldsize;
+
+				humanize_number(size, sizeof(size), pkgsize, "B", HN_AUTOSCALE, 0);
+
+				printf("\t%s-%s (%" PRId64 "%% of %s)\n", name, newversion, 100 - (100 * oldsize)/pkgsize, size);
+				break;
 			}
-			break;
-		case PKG_JOBS_DEINSTALL:
-		case PKG_JOBS_AUTOREMOVE:
-			oldsize += flatsize;
-			newsize += newflatsize;
-			
-			printf("\t%s-%s\n", name, version);
-			break;
-		case PKG_JOBS_FETCH:
-			dlsize += pkgsize;
-			snprintf(path, MAXPATHLEN, "%s/%s", cachedir, pkgrepopath);
-			if (stat(path, &st) != -1)
-				oldsize = st.st_size;
-			else
-				oldsize = 0;
-			dlsize -= oldsize;
-
-			humanize_number(size, sizeof(size), pkgsize, "B", HN_AUTOSCALE, 0);
-
-			printf("\t%s-%s (%" PRId64 "%% of %s)\n", name, newversion, 100 - (100 * oldsize)/pkgsize, size);
-			break;
 		}
 	}
 
