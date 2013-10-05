@@ -67,8 +67,9 @@ pkgcli_update(bool force) {
 				       "fresh copy\n", pkg_repo_ident(r));
 				retcode = EPKG_OK;
 		}
+		/* Skip broken repositories */
 		if (retcode != EPKG_OK)
-			break;
+			continue;
 	}
 
 	return (retcode);
