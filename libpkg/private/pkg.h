@@ -274,6 +274,15 @@ struct pkg_repo {
 	UT_hash_handle hh;
 };
 
+#define URL_SCHEME_PREFIX	"pkg+"
+
+struct url_list {
+	struct url_list	*next;
+	struct url	*url;
+	int		 priority;
+	int		 weight;
+};
+
 /* sql helpers */
 
 typedef struct _sql_prstmt {

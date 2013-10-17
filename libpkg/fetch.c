@@ -1,6 +1,7 @@
 /*-
  * Copyright (c) 2012-2013 Baptiste Daroussin <bapt@FreeBSD.org>
  * Copyright (c) 2011-2012 Julien Laffaye <jlaffaye@FreeBSD.org>
+ * Copyright (c) 2013 Matthew Seaman <matthew@FreeBSD.org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,38 +26,60 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/event.h>
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <sys/event.h>
 #include <sys/time.h>
 
 #include <ctype.h>
 #include <fcntl.h>
+#include <fetch.h>
 #include <errno.h>
 #define _WITH_GETLINE
 #include <stdio.h>
+#include <pthread.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <fetch.h>
-#include <pthread.h>
+#include <uthash.h>
 
 #include "pkg.h"
 #include "private/event.h"
 #include "private/pkg.h"
 #include "private/utils.h"
 
-static void
-gethttpmirrors(struct pkg_repo *repo, const char *url) {
-	FILE *f;
-	char *line = NULL;
-	size_t linecap = 0;
-	ssize_t linelen;
-	struct http_mirror *m;
-	struct url *u;
 
-	if ((f = fetchGetURL(url, "")) == NULL)
+FILE *
+sshGetURL(struct url *url, const char *flags)
+{
+
+
+}
+
+struct url_list *
+get_http_mirrors(struct url_list *url_list, const char *url) {
+	FILE		*f;
+	char		*line = NULL;
+	size_t		 linecap = 0;
+	ssize_t		 linelen;
+	int		 linecount = 0;
+	struct url_list	*ul;
+	struct url	*u;
+
+	u = fetchParseURL(url);
+	if (u == NULL)
 		return;
+
+	if (strcmp(u->scheme, "ssh") == 0) {
+		f = sshGetURL(u, "");
+	} else {
+		f = fetchGet(u, "");
+	}
+
+	if (f == NULL) {
+		fetchFreeURL(u);
+		return;
+	}
 
 	while ((linelen = getline(&line, &linecap, f)) > 0) {
 		if (strncmp(line, "URL:", 4) == 0) {
@@ -71,15 +94,50 @@ gethttpmirrors(struct pkg_repo *repo, const char *url) {
 			if (*line == '\0')
 				continue;
 
-			if ((u = fetchParseURL(line)) != NULL) {
-				m = malloc(sizeof(struct http_mirror));
-				m->url = u;
-				LL_APPEND(repo->http, m);
+			if ((u = fetchParseURL(line)) != NULL &&
+			    (ul = malloc(sizeof(struct url_list))) != NULL) {
+				linecount++;
+				
+				/* priority is just derived from the
+				   order URL lines are returned (first
+				   = preferred = lowest priority
+				   number).  There's no way to specify
+				   a weighting, so assume equal */
+
+				ul->url = u;
+				ul->priority = linecount;
+				ul->weight = -1;
+
+				LL_APPEND(url_list, ul);
 			}
 		}
 	}
 	fclose(f);
-	return;
+	return (url_list);
+}
+
+struct url_list *
+get_srv_mirrors(struct url_list *url_list, const char *url)
+{
+	struct url_list	*ul;
+	struct url	*u;
+	char		 zone[MAXHOSTNAMELEN + 13];
+	int		 zlen;
+
+	u = fetchParseURL(url);
+
+	zlen = snprintf(zone, sizeof(zone), "_%s._tcp.%s", u->scheme, u->host);
+	if (zlen >= sizeof(zone)) {
+		pkg_emit_error("URL scheme and host part too long in %s", url);
+		goto cleanup;
+	}
+
+	/* @@@@@@@@@@@@@@@@@@@ */
+
+cleanup:
+	fetchFreeURL(u);
+
+	return (url_list);
 }
 
 int
@@ -186,13 +244,107 @@ start_ssh(struct pkg_repo *repo, struct url *u, off_t *sz)
 	return (EPKG_FATAL);
 }
 
-#define URL_SCHEME_PREFIX	"pkg+"
+void
+free_url_list_item(struct url_list *ul_item)
+{
+	fetchFreeURL(ul_item->url);
+	free(ul_item);
+
+	return;
+}
+
+void
+free_url_list(struct url_list *url_list)
+{
+	LL_FREE(url_list, url_list, free_url_list_item);
+	return;
+}
+
+struct url_list *
+add_one_url(struct url_list *url_list, const char *url)
+{
+	struct url_list	*ul;
+
+	ul = malloc(sizeof(struct url_list));
+	if (ul == NULL)	/* Out of memory */
+		return NULL;
+
+	ul->url = fetchParseURL(url);
+	ul->weight = -1;
+	ul->priority = -1;
+
+	LL_APPEND(url_list, ul);
+
+	return (url_list);
+}
+
+struct url_list *
+parse_and_lookup_url(struct pkg_repo *repo, const char *url)
+{
+	struct url_list		*url_list = NULL;
+
+	/*
+	 * A URL of the form http://host.example.com/ where
+	 * host.example.com does not resolve as a simple A record is
+	 * not valid according to RFC 2616 Section 3.2.2.  Our usage
+	 * with SRV records is incorrect.  However it is encoded into
+	 * /usr/sbin/pkg in various releases so we can't just drop it.
+         *
+         * Instead, introduce new pkg+http://, pkg+https://,
+	 * pkg+ssh://, pkg+ftp://, pkg+file:// to support the
+	 * SRV-style server discovery, and also to allow eg. Firefox
+	 * to run pkg-related stuff given a pkg+foo:// URL.
+	 *
+	 * Warn if using plain http://, https:// etc with SRV
+	 */
+
+	if (strncmp(URL_SCHEME_PREFIX, url, strlen(URL_SCHEME_PREFIX)) == 0) {
+		if (repo->mirror_type != SRV) {
+			pkg_emit_error("packagesite URL error for %s -- "
+				       URL_SCHEME_PREFIX
+				       ":// implies SRV mirror type", url);
+
+			/* Too early for there to be anything to cleanup */
+			return(EPKG_FATAL);
+		}
+
+		url += strlen(URL_SCHEME_PREFIX);
+		pkg_url_scheme = true;
+	}
+
+	/*
+	 * If the repo uses a MIRROR_TYPE that isn't NONE, then
+	 * populate struct url_list *ul with a singly linked list of
+	 * all the different alternatives in preference order.
+	 */
+
+	switch(repo->mirror_type) {
+	case SRV:
+		if (!pkg_url_scheme)
+			pkg_emit_notice("Warning: use of %s:// URL scheme with"
+			    " SRV records is deprecated: please switch to "
+			    "pkg+%s://", ul->url->scheme, ul->url->scheme);
+		url_list = get_srv_mirrors(url_list, url);
+		break;
+	case HTTP:
+		/* You don't actually have to use a http:// URL here
+		   -- any URL scheme fetch understands plus ssh:// can
+		   be used. */
+		url_list = get_http_mirrors(url_list, url);
+		break;
+	case NOMIRROR:
+		url_list = add_one_url(url_list, url);
+		break;
+	}
+
+	return url_list;
+}
 
 int
 pkg_fetch_file_to_fd(struct pkg_repo *repo, const char *url, int dest, time_t *t)
 {
 	FILE		*remote = NULL;
-	struct url	*u = NULL;
+	struct url_list	*url_list;
 	struct url_stat	 st;
 	off_t		 done = 0;
 	off_t		 r;
@@ -226,35 +378,9 @@ pkg_fetch_file_to_fd(struct pkg_repo *repo, const char *url, int dest, time_t *t
 
 	retry = max_retry;
 
-	/* A URL of the form http://host.example.com/ where
-	 * host.example.com does not resolve as a simple A record is
-	 * not valid according to RFC 2616 Section 3.2.2.  Our usage
-	 * with SRV records is incorrect.  However it is encoded into
-	 * /usr/sbin/pkg in various releases so we can't just drop it.
-         *
-         * Instead, introduce new pkg+http://, pkg+https://,
-	 * pkg+ssh://, pkg+ftp://, pkg+file:// to support the
-	 * SRV-style server discovery, and also to allow eg. Firefox
-	 * to run pkg-related stuff given a pkg+foo:// URL.
-	 *
-	 * Warn if using plain http://, https:// etc with SRV
-	 */
+	url_list = parse_and_lookup_url(repo, url);
 
-	if (strncmp(URL_SCHEME_PREFIX, url, strlen(URL_SCHEME_PREFIX)) == 0) {
-		if (repo->mirror_type != SRV) {
-			pkg_emit_error("packagesite URL error for %s -- "
-				       URL_SCHEME_PREFIX
-				       ":// implies SRV mirror type", url);
 
-			/* Too early for there to be anything to cleanup */
-			return(EPKG_FATAL);
-		}
-
-		url += strlen(URL_SCHEME_PREFIX);
-		pkg_url_scheme = true;
-	}
-
-	u = fetchParseURL(url);
 	if (t != NULL)
 		u->ims_time = *t;
 
@@ -293,10 +419,6 @@ pkg_fetch_file_to_fd(struct pkg_repo *repo, const char *url, int dest, time_t *t
 			    (strncmp(u->scheme, "http", 4) == 0
 			     || strcmp(u->scheme, "ftp") == 0)) {
 
-				if (!pkg_url_scheme)
-					pkg_emit_notice(
-     "Warning: use of %s:// URL scheme with SRV records is deprecated: "
-     "switch to pkg+%s://", u->scheme, u->scheme);
 
 				snprintf(zone, sizeof(zone),
 				    "_%s._tcp.%s", u->scheme, u->host);
