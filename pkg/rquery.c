@@ -2,6 +2,7 @@
  * Copyright (c) 2011-2012 Baptiste Daroussin <bapt@FreeBSD.org>
  * Copyright (c) 2011-2012 Marin Atanasov Nikolov <dnaeon@gmail.com>
  * Copyright (c) 2012-2013 Bryan Drewery <bdrewery@FreeBSD.org>
+ * Copyright (c) 2013 Matthew Seaman <matthew@FreeBSD.org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -46,7 +47,7 @@ static struct query_flags accepted_rquery_flags[] = {
 	{ 'd', "nov",		1, PKG_LOAD_DEPS },
 	{ 'r', "nov",		1, PKG_LOAD_RDEPS },
 	{ 'C', "",		1, PKG_LOAD_CATEGORIES },
-	{ 'O', "kv",		1, PKG_LOAD_OPTIONS },
+	{ 'O', "kvdD",		1, PKG_LOAD_OPTIONS },
 	{ 'L', "",		1, PKG_LOAD_LICENSES },
 	{ 'B', "",		1, PKG_LOAD_SHLIBS_REQUIRED },
 	{ 'b', "",		1, PKG_LOAD_SHLIBS_PROVIDED },

@@ -3,6 +3,7 @@
  * Copyright (c) 2011-2012 Julien Laffaye <jlaffaye@FreeBSD.org>
  * Copyright (c) 2011 Philippe Pepiot <phil@philpep.org>
  * Copyright (c) 2011-2012 Marin Atanasov Nikolov <dnaeon@gmail.com>
+ * Copyright (c) 2013 Matthew Seaman <matthew@FreeBSD.org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -67,7 +68,7 @@ exec_info(int argc, char **argv)
 	struct pkgdb_it *it = NULL;
 	int query_flags;
 	struct pkg *pkg = NULL;
-	unsigned int opt = INFO_TAG_NAMEVER;
+	uint64_t opt = INFO_TAG_NAMEVER;
 	match_t match = MATCH_GLOB;
 	char *pkgname;
 	char *pkgversion = NULL, *pkgversion2 = NULL;
