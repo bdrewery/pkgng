@@ -140,14 +140,14 @@ usage(const char *conffile, const char *reposdir)
 	fprintf(stderr, "Global options supported:\n");
 	fprintf(stderr, "\t%-15s%s\n", "-d", "Increment debug level");
 #ifndef NO_LIBJAIL
-	fprintf(stderr, "\t%-15s%s\n", "-j", "Execute pkg(1) inside a jail(8)");
+	fprintf(stderr, "\t%-15s%s\n", "-j", "Execute pkg(8) inside a jail(8)");
 #endif
-	fprintf(stderr, "\t%-15s%s\n", "-c", "Execute pkg(1) inside a chroot(8)");
+	fprintf(stderr, "\t%-15s%s\n", "-c", "Execute pkg(8) inside a chroot(8)");
 	fprintf(stderr, "\t%-15s%s\n", "-C", "Use the specified configuration file");
 	fprintf(stderr, "\t%-15s%s\n", "-R", "Directory to search for individual repository configurations");
 	fprintf(stderr, "\t%-15s%s\n", "-l", "List available commands and exit");
-	fprintf(stderr, "\t%-15s%s\n", "-v", "Display pkg(1) version");
-	fprintf(stderr, "\t%-15s%s\n\n", "-N", "Test if pkg(1) is activated and avoid auto-activation");
+	fprintf(stderr, "\t%-15s%s\n", "-v", "Display pkg(8) version");
+	fprintf(stderr, "\t%-15s%s\n\n", "-N", "Test if pkg(8) is activated and avoid auto-activation");
 	fprintf(stderr, "Commands supported:\n");
 
 	for (unsigned int i = 0; i < cmd_len; i++)
@@ -256,52 +256,52 @@ show_config_info(int version)
 		switch (pkg_config_type(conf)) {
 		case PKG_CONFIG_STRING:
 			pkg_config_string(pkg_config_id(conf), &buf);
-			cout = printf("%24s: %s", configname,
+			cout = printf("%-24s: %s", configname,
 			    buf == NULL ? "" : buf);
 
 			if (version > 2) {
 				pkg_config_desc(pkg_config_id(conf), &buf);
 				if (buf != NULL) {
 					cout = (cout >= 48 ? 1 : 48 - cout);
-					printf("%*s(%s)", cout, "", buf);
+					printf("%*s/* %s */", cout, "", buf);
 				}
 			}
 			printf("\n");
 			break;
 		case PKG_CONFIG_BOOL:
 			pkg_config_bool(pkg_config_id(conf), &b);
-			cout = printf("%24s: %s", configname, b ? "yes": "no");
+			cout = printf("%-24s: %s", configname, b ? "yes": "no");
 
 			if (version > 2) {
 				pkg_config_desc(pkg_config_id(conf), &buf);
 				if (buf != NULL) {
 					cout = (cout >= 48 ? 1 : 48 - cout);
-					printf("%*s(%s)", cout, "", buf);
+					printf("%*s/* %s */", cout, "", buf);
 				}
 			}
 			printf("\n");
 			break;
 		case PKG_CONFIG_INTEGER:
 			pkg_config_int64(pkg_config_id(conf), &integer);
-			cout = printf("%24s: %"PRId64, configname, integer);
+			cout = printf("%-24s: %"PRId64, configname, integer);
 
 			if (version > 2) {
 				pkg_config_desc(pkg_config_id(conf), &buf);
 				if (buf != NULL) {
 					cout = (cout >= 48 ? 1 : 48 - cout);
-					printf("%*s(%s)", cout, "", buf);
+					printf("%*s/* %s */", cout, "", buf);
 				}
 			}
 			printf("\n");
 			break;
 		case PKG_CONFIG_KVLIST:
-			cout = printf("%24s:", configname);
+			cout = printf("%-24s: {", configname);
 
 			if (version > 2) {
 				pkg_config_desc(pkg_config_id(conf), &buf);
 				if (buf != NULL) {
 					cout = (cout >= 48 ? 1 : 48 - cout);
-					printf("%*s(%s)", cout, "", buf);
+					printf("%*s/* %s */", cout, "", buf);
 				}
 			}
 			printf("\n");
@@ -309,19 +309,20 @@ show_config_info(int version)
 			kv = NULL;
 			while (pkg_config_kvlist(pkg_config_id(conf), &kv)
 			       == EPKG_OK) {
-				printf("\t- %16s: %s\n",
+				printf("  %s: %s,\n",
 				    pkg_config_kv_get(kv, PKG_CONFIG_KV_KEY),
 				    pkg_config_kv_get(kv, PKG_CONFIG_KV_VALUE));
 			}
+			printf("}\n");
 			break;
 		case PKG_CONFIG_LIST:
-			cout = printf("%24s:", configname);
+			cout = printf("%-24s: [", configname);
 
 			if (version > 2) {
 				pkg_config_desc(pkg_config_id(conf), &buf);
 				if (buf != NULL) {
 					cout = (cout >= 48 ? 1 : 48 - cout);
-					printf("%*s(%s)", cout, "", buf);
+					printf("%*s/* %s */", cout, "", buf);
 				}
 			}
 			printf("\n");
@@ -329,8 +330,9 @@ show_config_info(int version)
 			list = NULL;
 			while (pkg_config_list(pkg_config_id(conf), &list)
 			       == EPKG_OK) {
-				printf("\t- %16s\n", pkg_config_value(list));
+				printf("  %-s,\n", pkg_config_value(list));
 			}
+			printf("]\n");
 			break;
 		}
 	}
@@ -441,10 +443,11 @@ show_repository_info(void)
 			break;
 		}
 
-		printf("  %s:\n%16s: %s\n%16s: %s\n%16s: %s\n%16s: %s\n%16s: %s\n%16s: %s\n",
+		printf("  %s: { \n    %-16s: %s,\n    %-16s: %s,\n    %-16s: %s,\n"
+		    "    %-16s: %s,\n    %-16s: %s,\n    %-16s: %s\n  } \n",
 		    pkg_repo_ident(repo),
                     "url", pkg_repo_url(repo),
-		    "signature", sig,
+		    "signature_type", sig,
 		    "pubkey", pkg_repo_key(repo) == NULL ?
 		        "" : pkg_repo_key(repo),
 		    "fingerprints", pkg_repo_fingerprints(repo) == NULL ?
@@ -478,10 +481,10 @@ do_activation_test(int argc)
 {
 	int	count;
 
-	/* Test to see if pkg(1) has been activated.  Exit with an
+	/* Test to see if pkg(8) has been activated.  Exit with an
 	   error code if not.  Can be combined with -c and -j to test
 	   if pkg is activated in chroot or jail. If there are no
-	   other arguments, and pkg(1) has been activated, show how
+	   other arguments, and pkg(8) has been activated, show how
 	   many packages have been installed. */
 
 	switch (pkg_status(&count)) {
@@ -658,6 +661,11 @@ main(int argc, char **argv)
 
 	if (activation_test)
 		do_activation_test(argc);
+
+	if (argc == 1 && strcmp(argv[0], "bootstrap") == 0) {
+		printf("pkg already bootstrapped\n");
+		exit(EXIT_SUCCESS);
+	}
 
 	newargv = argv;
 	newargc = argc;

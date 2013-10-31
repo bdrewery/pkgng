@@ -36,6 +36,7 @@
 #include <ctype.h>
 
 #include "utlist.h"
+#include "utstring.h"
 #include "ucl.h"
 
 #ifdef HAVE_OPENSSL
@@ -48,6 +49,8 @@
  */
 
 #define UCL_MAX_RECURSION 16
+#define UCL_TRASH_KEY 0
+#define UCL_TRASH_VALUE 1
 
 enum ucl_parser_state {
 	UCL_STATE_INIT = 0,
@@ -76,7 +79,8 @@ enum ucl_character_type {
 	UCL_CHARACTER_VALUE_DIGIT_START = 1 << 7,
 	UCL_CHARACTER_ESCAPE = 1 << 8,
 	UCL_CHARACTER_KEY_SEP = 1 << 9,
-	UCL_CHARACTER_JSON_UNSAFE = 1 << 10
+	UCL_CHARACTER_JSON_UNSAFE = 1 << 10,
+	UCL_CHARACTER_UCL_UNSAFE = 1 << 11
 };
 
 struct ucl_macro {
@@ -123,13 +127,14 @@ struct ucl_parser {
 	struct ucl_stack *stack;
 	struct ucl_chunk *chunks;
 	struct ucl_pubkey *keys;
+	UT_string *err;
 };
 
 /**
  * Unescape json string inplace
  * @param str
  */
-void ucl_unescape_json_string (char *str);
+size_t ucl_unescape_json_string (char *str, size_t len);
 
 /**
  * Handle include macro
@@ -139,7 +144,7 @@ void ucl_unescape_json_string (char *str);
  * @param err error ptr
  * @return
  */
-bool ucl_include_handler (const unsigned char *data, size_t len, void* ud, UT_string **err);
+bool ucl_include_handler (const unsigned char *data, size_t len, void* ud);
 
 /**
  * Handle includes macro
@@ -149,11 +154,15 @@ bool ucl_include_handler (const unsigned char *data, size_t len, void* ud, UT_st
  * @param err error ptr
  * @return
  */
-bool ucl_includes_handler (const unsigned char *data, size_t len, void* ud, UT_string **err);
+bool ucl_includes_handler (const unsigned char *data, size_t len, void* ud);
 
 size_t ucl_strlcpy (char *dst, const char *src, size_t siz);
 size_t ucl_strlcpy_unsafe (char *dst, const char *src, size_t siz);
 size_t ucl_strlcpy_tolower (char *dst, const char *src, size_t siz);
+
+
+void ucl_elt_write_json (ucl_object_t *obj, UT_string *buf, unsigned int tabs,
+		bool start_tabs, bool compact);
 
 #ifdef __GNUC__
 static inline void
@@ -173,5 +182,71 @@ ucl_create_err (UT_string **err, const char *fmt, ...)
 		va_end (ap);
 	}
 }
+
+/**
+ * Check whether a given string contains a boolean value
+ * @param obj object to set
+ * @param start start of a string
+ * @param len length of a string
+ * @return true if a string is a boolean value
+ */
+static inline bool
+ucl_maybe_parse_boolean (ucl_object_t *obj, const unsigned char *start, size_t len)
+{
+	const unsigned char *p = start;
+	bool ret = false, val = false;
+
+	if (len == 5) {
+		if (tolower (p[0]) == 'f' && strncasecmp (p, "false", 5) == 0) {
+			ret = true;
+			val = false;
+		}
+	}
+	else if (len == 4) {
+		if (tolower (p[0]) == 't' && strncasecmp (p, "true", 4) == 0) {
+			ret = true;
+			val = true;
+		}
+	}
+	else if (len == 3) {
+		if (tolower (p[0]) == 'y' && strncasecmp (p, "yes", 3) == 0) {
+			ret = true;
+			val = true;
+		}
+		if (tolower (p[0]) == 'o' && strncasecmp (p, "off", 3) == 0) {
+			ret = true;
+			val = false;
+		}
+	}
+	else if (len == 2) {
+		if (tolower (p[0]) == 'n' && strncasecmp (p, "no", 2) == 0) {
+			ret = true;
+			val = false;
+		}
+		else if (tolower (p[0]) == 'o' && strncasecmp (p, "on", 2) == 0) {
+			ret = true;
+			val = true;
+		}
+	}
+
+	if (ret) {
+		obj->type = UCL_BOOLEAN;
+		obj->value.iv = val;
+	}
+
+	return ret;
+}
+
+/**
+ * Check numeric string
+ * @param obj object to set if a string is numeric
+ * @param start start of string
+ * @param end end of string
+ * @param pos position where parsing has stopped
+ * @param allow_double allow parsing of floating point values
+ * @return 0 if string is numeric and error code (EINVAL or ERANGE) in case of conversion error
+ */
+int ucl_maybe_parse_number (ucl_object_t *obj,
+		const char *start, const char *end, const char **pos, bool allow_double);
 
 #endif /* UCL_INTERNAL_H_ */

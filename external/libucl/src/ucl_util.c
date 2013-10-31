@@ -23,6 +23,7 @@
 
 #include "ucl.h"
 #include "ucl_internal.h"
+#include "ucl_chartable.h"
 
 #ifdef HAVE_OPENSSL
 #include <openssl/err.h>
@@ -39,30 +40,30 @@
 
 
 static void
-ucl_obj_free_internal (ucl_object_t *obj, bool allow_rec)
+ucl_object_free_internal (ucl_object_t *obj, bool allow_rec)
 {
 	ucl_object_t *sub, *tmp;
 
 	while (obj != NULL) {
-		if (obj->key != NULL) {
-			free (obj->key);
+		if (obj->trash_stack[UCL_TRASH_KEY] != NULL) {
+			UCL_FREE (obj->hh.keylen, obj->trash_stack[UCL_TRASH_KEY]);
+		}
+		if (obj->trash_stack[UCL_TRASH_VALUE] != NULL) {
+			UCL_FREE (obj->len, obj->trash_stack[UCL_TRASH_VALUE]);
 		}
 
-		if (obj->type == UCL_STRING) {
-			free (obj->value.sv);
-		}
-		else if (obj->type == UCL_ARRAY) {
+		if (obj->type == UCL_ARRAY) {
 			sub = obj->value.ov;
 			while (sub != NULL) {
 				tmp = sub->next;
-				ucl_obj_free_internal (sub, false);
+				ucl_object_free_internal (sub, false);
 				sub = tmp;
 			}
 		}
 		else if (obj->type == UCL_OBJECT) {
 			HASH_ITER (hh, obj->value.ov, sub, tmp) {
 				HASH_DELETE (hh, obj->value.ov, sub);
-				ucl_obj_free_internal (sub, true);
+				ucl_object_free_internal (sub, true);
 			}
 		}
 		tmp = obj->next;
@@ -78,18 +79,18 @@ ucl_obj_free_internal (ucl_object_t *obj, bool allow_rec)
 void
 ucl_obj_free (ucl_object_t *obj)
 {
-	ucl_obj_free_internal (obj, true);
+	ucl_object_free_internal (obj, true);
 }
 
-void
-ucl_unescape_json_string (char *str)
+size_t
+ucl_unescape_json_string (char *str, size_t len)
 {
 	char *t = str, *h = str;
 	int i, uval;
 
 	/* t is target (tortoise), h is source (hare) */
 
-	while (*h != '\0') {
+	while (len) {
 		if (*h == '\\') {
 			h ++;
 			switch (*h) {
@@ -130,6 +131,7 @@ ucl_unescape_json_string (char *str)
 					}
 				}
 				h += 3;
+				len -= 3;
 				/* Encode */
 				if(uval < 0x80) {
 					t[0] = (char)uval;
@@ -162,19 +164,69 @@ ucl_unescape_json_string (char *str)
 				break;
 			}
 			h ++;
+			len --;
 		}
 		else {
 			*t++ = *h++;
 		}
+		len --;
 	}
 	*t = '\0';
+
+	return (t - str);
+}
+
+char *
+ucl_copy_key_trash (ucl_object_t *obj)
+{
+	if (obj->trash_stack[UCL_TRASH_KEY] == NULL && obj->hh.key != NULL) {
+		obj->trash_stack[UCL_TRASH_KEY] = malloc (obj->hh.keylen + 1);
+		if (obj->trash_stack[UCL_TRASH_KEY] != NULL) {
+			memcpy (obj->trash_stack[UCL_TRASH_KEY], obj->hh.key, obj->hh.keylen);
+			obj->trash_stack[UCL_TRASH_KEY][obj->hh.keylen] = '\0';
+		}
+		obj->hh.key = obj->trash_stack[UCL_TRASH_KEY];
+		obj->flags |= UCL_OBJECT_ALLOCATED_KEY;
+	}
+
+	return obj->trash_stack[UCL_TRASH_KEY];
+}
+
+char *
+ucl_copy_value_trash (ucl_object_t *obj)
+{
+	UT_string *emitted;
+	if (obj->trash_stack[UCL_TRASH_VALUE] == NULL) {
+		if (obj->type == UCL_STRING) {
+			/* Special case for strings */
+			obj->trash_stack[UCL_TRASH_VALUE] = malloc (obj->len + 1);
+			if (obj->trash_stack[UCL_TRASH_VALUE] != NULL) {
+				memcpy (obj->trash_stack[UCL_TRASH_VALUE], obj->value.sv, obj->len);
+				obj->trash_stack[UCL_TRASH_VALUE][obj->len] = '\0';
+				obj->value.sv = obj->trash_stack[UCL_TRASH_VALUE];
+			}
+		}
+		else {
+			/* Just emit value in json notation */
+			utstring_new (emitted);
+
+			if (emitted != NULL) {
+				ucl_elt_write_json (obj, emitted, 0, 0, true);
+				obj->trash_stack[UCL_TRASH_VALUE] = emitted->d;
+				obj->len = emitted->i;
+				free (emitted);
+			}
+		}
+		obj->flags |= UCL_OBJECT_ALLOCATED_VALUE;
+	}
+	return obj->trash_stack[UCL_TRASH_VALUE];
 }
 
 ucl_object_t*
-ucl_parser_get_object (struct ucl_parser *parser, UT_string **err)
+ucl_parser_get_object (struct ucl_parser *parser)
 {
 	if (parser->state != UCL_STATE_INIT && parser->state != UCL_STATE_ERROR) {
-		return ucl_obj_ref (parser->top_obj);
+		return ucl_object_ref (parser->top_obj);
 	}
 
 	return NULL;
@@ -189,7 +241,7 @@ ucl_parser_free (struct ucl_parser *parser)
 	struct ucl_pubkey *key, *ktmp;
 
 	if (parser->top_obj != NULL) {
-		ucl_obj_unref (parser->top_obj);
+		ucl_object_unref (parser->top_obj);
 	}
 
 	LL_FOREACH_SAFE (parser->stack, stack, stmp) {
@@ -207,15 +259,28 @@ ucl_parser_free (struct ucl_parser *parser)
 		UCL_FREE (sizeof (struct ucl_pubkey), key);
 	}
 
+	if (parser->err != NULL) {
+		utstring_free(parser->err);
+	}
+
 	UCL_FREE (sizeof (struct ucl_parser), parser);
 }
 
+const char *
+ucl_parser_get_error(struct ucl_parser *parser)
+{
+	if (parser->err == NULL)
+		return NULL;
+
+	return utstring_body(parser->err);
+}
+
 bool
-ucl_pubkey_add (struct ucl_parser *parser, const unsigned char *key, size_t len, UT_string **err)
+ucl_pubkey_add (struct ucl_parser *parser, const unsigned char *key, size_t len)
 {
 	struct ucl_pubkey *nkey;
 #ifndef HAVE_OPENSSL
-	ucl_create_err (err, "cannot check signatures without openssl");
+	ucl_create_err (&parser->err, "cannot check signatures without openssl");
 	return false;
 #else
 # if (OPENSSL_VERSION_NUMBER < 0x10000000L)
@@ -230,7 +295,7 @@ ucl_pubkey_add (struct ucl_parser *parser, const unsigned char *key, size_t len,
 	BIO_free (mem);
 	if (nkey->key == NULL) {
 		UCL_FREE (sizeof (struct ucl_pubkey), nkey);
-		ucl_create_err (err, "%s",
+		ucl_create_err (&parser->err, "%s",
 				ERR_error_string (ERR_get_error (), NULL));
 		return false;
 	}
@@ -296,7 +361,7 @@ ucl_fetch_url (const unsigned char *url, unsigned char **buf, size_t *buflen, UT
 	}
 
 	*buflen = us.size;
-	*buf = g_malloc (*buflen);
+	*buf = malloc (*buflen);
 	if (*buf == NULL) {
 		ucl_create_err (err, "cannot allocate buffer for URL %s: %s",
 				url, strerror (errno));
@@ -450,7 +515,7 @@ ucl_sig_check (const unsigned char *data, size_t datalen,
  */
 static bool
 ucl_include_url (const unsigned char *data, size_t len,
-		struct ucl_parser *parser, bool check_signature, UT_string **err)
+		struct ucl_parser *parser, bool check_signature)
 {
 
 	bool res;
@@ -461,7 +526,7 @@ ucl_include_url (const unsigned char *data, size_t len,
 
 	snprintf (urlbuf, sizeof (urlbuf), "%.*s", (int)len, data);
 
-	if (!ucl_fetch_url (urlbuf, &buf, &buflen, err)) {
+	if (!ucl_fetch_url (urlbuf, &buf, &buflen, &parser->err)) {
 		return false;
 	}
 
@@ -473,7 +538,7 @@ ucl_include_url (const unsigned char *data, size_t len,
 			return false;
 		}
 		if (!ucl_sig_check (buf, buflen, sigbuf, siglen, parser)) {
-			ucl_create_err (err, "cannot verify url %s: %s",
+			ucl_create_err (&parser->err, "cannot verify url %s: %s",
 							urlbuf,
 							ERR_error_string (ERR_get_error (), NULL));
 			munmap (sigbuf, siglen);
@@ -483,7 +548,7 @@ ucl_include_url (const unsigned char *data, size_t len,
 #endif
 	}
 
-	res = ucl_parser_add_chunk (parser, buf, buflen, err);
+	res = ucl_parser_add_chunk (parser, buf, buflen);
 	if (res == true) {
 		/* Remove chunk from the stack */
 		chunk = parser->chunks;
@@ -507,7 +572,7 @@ ucl_include_url (const unsigned char *data, size_t len,
  */
 static bool
 ucl_include_file (const unsigned char *data, size_t len,
-		struct ucl_parser *parser, bool check_signature, UT_string **err)
+		struct ucl_parser *parser, bool check_signature)
 {
 	bool res;
 	struct ucl_chunk *chunk;
@@ -517,13 +582,13 @@ ucl_include_file (const unsigned char *data, size_t len,
 
 	snprintf (filebuf, sizeof (filebuf), "%.*s", (int)len, data);
 	if (realpath (filebuf, realbuf) == NULL) {
-		ucl_create_err (err, "cannot open file %s: %s",
+		ucl_create_err (&parser->err, "cannot open file %s: %s",
 									filebuf,
 									strerror (errno));
 		return false;
 	}
 
-	if (!ucl_fetch_file (realbuf, &buf, &buflen, err)) {
+	if (!ucl_fetch_file (realbuf, &buf, &buflen, &parser->err)) {
 		return false;
 	}
 
@@ -545,7 +610,7 @@ ucl_include_file (const unsigned char *data, size_t len,
 #endif
 	}
 
-	res = ucl_parser_add_chunk (parser, buf, buflen, err);
+	res = ucl_parser_add_chunk (parser, buf, buflen);
 	if (res == true) {
 		/* Remove chunk from the stack */
 		chunk = parser->chunks;
@@ -568,16 +633,16 @@ ucl_include_file (const unsigned char *data, size_t len,
  * @return
  */
 bool
-ucl_include_handler (const unsigned char *data, size_t len, void* ud, UT_string **err)
+ucl_include_handler (const unsigned char *data, size_t len, void* ud)
 {
 	struct ucl_parser *parser = ud;
 
 	if (*data == '/' || *data == '.') {
 		/* Try to load a file */
-		return ucl_include_file (data, len, parser, false, err);
+		return ucl_include_file (data, len, parser, false);
 	}
 
-	return ucl_include_url (data, len, parser, false, err);
+	return ucl_include_url (data, len, parser, false);
 }
 
 /**
@@ -589,31 +654,30 @@ ucl_include_handler (const unsigned char *data, size_t len, void* ud, UT_string 
  * @return
  */
 bool
-ucl_includes_handler (const unsigned char *data, size_t len, void* ud, UT_string **err)
+ucl_includes_handler (const unsigned char *data, size_t len, void* ud)
 {
 	struct ucl_parser *parser = ud;
 
 	if (*data == '/' || *data == '.') {
 		/* Try to load a file */
-		return ucl_include_file (data, len, parser, true, err);
+		return ucl_include_file (data, len, parser, true);
 	}
 
-	return ucl_include_url (data, len, parser, true, err);
+	return ucl_include_url (data, len, parser, true);
 }
 
 bool
-ucl_parser_add_file (struct ucl_parser *parser, const char *filename,
-		UT_string **err)
+ucl_parser_add_file (struct ucl_parser *parser, const char *filename)
 {
 	unsigned char *buf;
 	size_t len;
 	bool ret;
 
-	if (!ucl_fetch_file (filename, &buf, &len, err)) {
+	if (!ucl_fetch_file (filename, &buf, &len, &parser->err)) {
 		return false;
 	}
 
-	ret = ucl_parser_add_chunk (parser, buf, len, err);
+	ret = ucl_parser_add_chunk (parser, buf, len);
 
 	munmap (buf, len);
 
@@ -672,5 +736,161 @@ ucl_strlcpy_tolower (char *dst, const char *src, size_t siz)
 		*d = '\0';
 	}
 
-	return (s - src - 1);    /* count does not include NUL */
+	return (s - src);    /* count does not include NUL */
+}
+
+ucl_object_t *
+ucl_object_fromstring_common (const char *str, size_t len, enum ucl_string_flags flags)
+{
+	ucl_object_t *obj;
+	const char *start, *end, *p, *pos;
+	char *dst, *d;
+	size_t escaped_len;
+
+	if (str == NULL) {
+		return NULL;
+	}
+
+	obj = ucl_object_new ();
+	if (obj) {
+		if (len == 0) {
+			len = strlen (str);
+		}
+		if (flags & UCL_STRING_TRIM) {
+			/* Skip leading spaces */
+			for (start = str; (size_t)(start - str) < len; start ++) {
+				if (!ucl_test_character (*start, UCL_CHARACTER_WHITESPACE_UNSAFE)) {
+					break;
+				}
+			}
+			/* Skip trailing spaces */
+			for (end = str + len - 1; end > start; end --) {
+				if (!ucl_test_character (*end, UCL_CHARACTER_WHITESPACE_UNSAFE)) {
+					break;
+				}
+			}
+			end ++;
+		}
+		else {
+			start = str;
+			end = str + len;
+		}
+
+		obj->type = UCL_STRING;
+		if (flags & UCL_STRING_ESCAPE) {
+			for (p = start, escaped_len = 0; p < end; p ++, escaped_len ++) {
+				if (ucl_test_character (*p, UCL_CHARACTER_JSON_UNSAFE)) {
+					escaped_len ++;
+				}
+			}
+			dst = malloc (escaped_len + 1);
+			if (dst != NULL) {
+				for (p = start, d = dst; p < end; p ++, d ++) {
+					if (ucl_test_character (*p, UCL_CHARACTER_JSON_UNSAFE)) {
+						switch (*p) {
+						case '\n':
+							*d++ = '\\';
+							*d = 'n';
+							break;
+						case '\r':
+							*d++ = '\\';
+							*d = 'r';
+							break;
+						case '\b':
+							*d++ = '\\';
+							*d = 'b';
+							break;
+						case '\t':
+							*d++ = '\\';
+							*d = 't';
+							break;
+						case '\f':
+							*d++ = '\\';
+							*d = 'f';
+							break;
+						case '\\':
+							*d++ = '\\';
+							*d = '\\';
+							break;
+						case '"':
+							*d++ = '\\';
+							*d = '"';
+							break;
+						}
+					}
+					else {
+						*d = *p;
+					}
+				}
+				*d = '\0';
+				obj->value.sv = dst;
+				obj->trash_stack[UCL_TRASH_VALUE] = dst;
+				obj->len = escaped_len;
+			}
+		}
+		else {
+			dst = malloc (end - start + 1);
+			if (dst != NULL) {
+				ucl_strlcpy_unsafe (dst, start, end - start + 1);
+				obj->value.sv = dst;
+				obj->trash_stack[UCL_TRASH_VALUE] = dst;
+				obj->len = end - start;
+			}
+		}
+		if ((flags & UCL_STRING_PARSE) && dst != NULL) {
+			/* Parse what we have */
+			if (flags & UCL_STRING_PARSE_BOOLEAN) {
+				if (!ucl_maybe_parse_boolean (obj, dst, obj->len) && (flags & UCL_STRING_PARSE_NUMBER)) {
+					ucl_maybe_parse_number (obj, dst, dst + obj->len, &pos,
+							flags & UCL_STRING_PARSE_DOUBLE);
+				}
+			}
+			else {
+				ucl_maybe_parse_number (obj, dst, dst + obj->len, &pos,
+						flags & UCL_STRING_PARSE_DOUBLE);
+			}
+		}
+	}
+
+	return obj;
+}
+
+ucl_object_t *
+ucl_object_insert_key (ucl_object_t *top, ucl_object_t *elt,
+		const char *key, size_t keylen, bool copy_key)
+{
+	ucl_object_t *found;
+	const char *p;
+
+	if (elt == NULL || key == NULL) {
+		return NULL;
+	}
+
+	if (top == NULL) {
+		top = ucl_object_new ();
+		top->type = UCL_OBJECT;
+	}
+	if (keylen == 0) {
+		keylen = strlen (key);
+	}
+
+	for (p = key; p < key + keylen; p ++) {
+		if (ucl_test_character (*p, UCL_CHARACTER_UCL_UNSAFE)) {
+			elt->flags |= UCL_OBJECT_NEED_KEY_ESCAPE;
+			break;
+		}
+	}
+
+	HASH_FIND (hh, top->value.ov, key, keylen, found);
+
+	if (!found) {
+		HASH_ADD_KEYPTR (hh, top->value.ov, key, keylen, elt);
+	}
+	DL_APPEND (found, elt);
+
+	if (copy_key) {
+		ucl_copy_key_trash (elt);
+	}
+
+	return top;
 }
