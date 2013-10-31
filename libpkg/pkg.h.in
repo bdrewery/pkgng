@@ -39,12 +39,12 @@
 #include <stringlist.h>
 #include <openssl/pem.h>
 
-/* The expected name of the pkg(1) binary executable. */
+/* The expected name of the pkg(8) binary executable. */
 #ifndef PKG_EXEC_NAME
 #define PKG_EXEC_NAME	"pkg"
 #endif
 
-/* The expected name of the pkg-static(1) binary */
+/* The expected name of the pkg-static(8) binary */
 #ifndef PKG_STATIC_NAME
 #define PKG_STATIC_NAME	"pkg-static"
 #endif
@@ -85,11 +85,11 @@ struct pkg_manifest_key;
 struct pkg_manifest_parser;
 
 /**
- * The system-wide pkg(1) status: ie. is it a) installed or otherwise
+ * The system-wide pkg(8) status: ie. is it a) installed or otherwise
  * available on the sysem, b) database (local.sqlite) initialised and
  * c) has at least one package installed (which should be pkg
  * itself). PKG_STATUS_UNINSTALLED logically cannot be returned by
- * pkg(1) itself, but it can be useful for the pkg bootstrapper
+ * pkg(8) itself, but it can be useful for the pkg bootstrapper
  * /usr/bin/pkg or for applications that link against libpkg.so
  */
 
@@ -934,14 +934,17 @@ int pkg_is_installed(struct pkgdb *db, const char *origin);
 /**
  * Create a repository database.
  * @param path The path where the repository live.
+ * @param output_dir The path where the package repository should be created.
  * @param force If true, rebuild the repository catalogue from scratch
  * @param filesite If true, create a list of all files in repo
  * @param callback A function which is called at every step of the process.
  * @param data A pointer which is passed to the callback.
  * @param sum An 65 long char array to receive the sha256 sum
  */
-int pkg_create_repo(char *path, bool force, bool filelist, void (*callback)(struct pkg *, void *), void *);
-int pkg_finish_repo(char *path, pem_password_cb *cb, char **argv, int argc, bool filelist);
+int pkg_create_repo(char *path, const char *output_dir, bool filelist,
+    void (*callback)(struct pkg *, void *), void *);
+int pkg_finish_repo(const char *output_dir, pem_password_cb *cb, char **argv,
+    int argc, bool filelist);
 
 /**
  * Test if the EUID has sufficient privilege to carry out some
