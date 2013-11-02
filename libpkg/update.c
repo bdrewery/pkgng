@@ -125,25 +125,25 @@ has_ext(const char *path, const char *ext)
 static struct fingerprint *
 parse_fingerprint(ucl_object_t *obj)
 {
-	ucl_object_t *sub, *tmp;
+	ucl_object_t *cur;
+	ucl_object_iter_t it;
 	const char *function = NULL, *fp = NULL;
 	hash_t fct = HASH_UNKNOWN;
 	struct fingerprint *f = NULL;
 	const char *key;
 
-
-	HASH_ITER(hh, obj, sub, tmp) {
-		key = ucl_object_key(sub);
-		if (sub->type != UCL_STRING)
+	while ((cur = ucl_iterate_object(obj, &it, true))) {
+		key = ucl_object_key(cur);
+		if (cur->type != UCL_STRING)
 			continue;
 
 		if (strcasecmp(key, "function") == 0) {
-			function = ucl_object_tostring(sub);
+			function = ucl_object_tostring(cur);
 			continue;
 		}
 
 		if (strcasecmp(key, "fingerprint") == 0) {
-			fp = ucl_object_tostring(sub);
+			fp = ucl_object_tostring(cur);
 			continue;
 		}
 	}
@@ -187,7 +187,7 @@ load_fingerprint(const char *dir, const char *filename)
 	obj = ucl_parser_get_object(p);
 
 	if (obj->type == UCL_OBJECT)
-		f = parse_fingerprint(obj->value.ov);
+		f = parse_fingerprint(obj);
 
 	ucl_object_free(obj);
 	ucl_parser_free(p);
@@ -697,7 +697,10 @@ pkg_update_incremental(const char *name, struct pkg_repo *repo, time_t *mtime)
 		map = mmap(NULL, len, PROT_READ, MAP_SHARED, fileno(fmanifest), 0);
 		fclose(fmanifest);
 	} else {
-		pkg_emit_error("File too large");
+		if (len == 0)
+			pkg_emit_error("Empty catalog");
+		else
+			pkg_emit_error("Catalog too large");
 		return (EPKG_FATAL);
 	}
 
