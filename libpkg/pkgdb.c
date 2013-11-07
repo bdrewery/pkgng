@@ -639,7 +639,6 @@ pkgdb_init(sqlite3 *sdb)
 
 	"CREATE INDEX deporigini on deps(origin);"
 	"CREATE INDEX pkg_script_package_id ON pkg_script(package_id);"
-	"CREATE INDEX options_package_id ON options (package_id);"
 	"CREATE INDEX deps_package_id ON deps (package_id);"
 	"CREATE INDEX files_package_id ON files (package_id);"
 	"CREATE INDEX pkg_directories_package_id ON pkg_directories (package_id);"
@@ -1139,9 +1138,18 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 		}
 	}
 
-	if (type == PKGDB_REMOTE)
-		if ((ret = pkgdb_open_multirepos(dbdir, db)) != EPKG_OK)
-			return (ret);
+	if (type == PKGDB_REMOTE) {
+		if (pkg_repos_count(true) > 0) {
+			if ((ret = pkgdb_open_multirepos(dbdir, db)) != EPKG_OK)
+				return (ret);
+		} else {
+			if (*db_p == NULL)
+				pkgdb_close(db);
+			pkg_emit_error("No activated remote repositories configured");
+			return (EPKG_FATAL);
+		}
+
+	}
 
 	*db_p = db;
 	return (EPKG_OK);
@@ -1161,6 +1169,9 @@ pkgdb_close(struct pkgdb *db)
 		if (db->type == PKGDB_REMOTE) {
 			pkgdb_detach_remotes(db->sqlite);
 		}
+
+		if (!sqlite3_db_readonly(db->sqlite, "main"))
+			pkg_plugins_hook_run(PKG_PLUGIN_HOOK_PKGDB_CLOSE_RW, NULL, db);
 
 		sqlite3_close(db->sqlite);
 	}

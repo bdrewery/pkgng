@@ -113,7 +113,8 @@ struct plugcmd {
 	STAILQ_ENTRY(plugcmd) next;
 };
 
-typedef int (register_cmd)(const char **name, const char **desc, int (**exec)(int argc, char **argv));
+typedef int (register_cmd)(int idx, const char **name, const char **desc, int (**exec)(int argc, char **argv));
+typedef int (nb_cmd)(void);
 
 static void
 show_command_names(void)
@@ -537,15 +538,16 @@ main(int argc, char **argv)
 	int newargc;
 	Tokenizer *t = NULL;
 	struct sbuf *newcmd;
-	int j;
+	int j, cmdargc;
 
 	/* Set stdout unbuffered */
 	setvbuf(stdout, NULL, _IONBF, 0);
 
+	cmdargv = argv;
+	cmdargc = argc;
+
 	if (argc < 2)
 		usage(NULL, NULL);
-
-	cmdargv = argv;
 
 #ifndef NO_LIBJAIL
 	while ((ch = getopt(argc, argv, "dj:c:C:R:lNvq")) != -1) {
@@ -593,6 +595,7 @@ main(int argc, char **argv)
 		show_command_names();
 		exit(EX_OK);
 	}
+
 	if (argc == 0 && version == 0 && !activation_test)
 		usage(conffile, reposdir);
 
@@ -647,11 +650,17 @@ main(int argc, char **argv)
 
 		/* load commands plugins */
 		while (pkg_plugins(&p) != EPKG_END) {
+			int n;
+
+			nb_cmd *ncmd = pkg_plugin_func(p, "pkg_register_cmd_count");
 			register_cmd *reg = pkg_plugin_func(p, "pkg_register_cmd");
-			if (reg != NULL) {
-				c = malloc(sizeof(struct plugcmd));
-				reg(&c->name, &c->desc, &c->exec);
-				STAILQ_INSERT_TAIL(&plugins, c, next);
+			if (reg != NULL && ncmd != NULL) {
+				n = ncmd();
+				for (j = 0; j < n ; j++) {
+					c = malloc(sizeof(struct plugcmd));
+					reg(j, &c->name, &c->desc, &c->exec);
+					STAILQ_INSERT_TAIL(&plugins, c, next);
+				}
 			}
 		}
 	}
