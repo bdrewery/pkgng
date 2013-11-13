@@ -126,7 +126,7 @@ static struct fingerprint *
 parse_fingerprint(ucl_object_t *obj)
 {
 	ucl_object_t *cur;
-	ucl_object_iter_t it;
+	ucl_object_iter_t it = NULL;
 	const char *function = NULL, *fp = NULL;
 	hash_t fct = HASH_UNKNOWN;
 	struct fingerprint *f = NULL;
@@ -195,16 +195,17 @@ load_fingerprint(const char *dir, const char *filename)
 	return (f);
 }
 
-static struct fingerprint *
-load_fingerprints(const char *path)
+static int
+load_fingerprints(const char *path, struct fingerprint **f)
 {
 	DIR *d;
 	struct dirent *ent;
-	struct fingerprint *f = NULL;
 	struct fingerprint *finger = NULL;
 
+	*f = NULL;
+
 	if ((d = opendir(path)) == NULL)
-		return (NULL);
+		return (EPKG_FATAL);
 
 	while ((ent = readdir(d))) {
 		if (strcmp(ent->d_name, ".") == 0 ||
@@ -212,12 +213,12 @@ load_fingerprints(const char *path)
 			continue;
 		finger = load_fingerprint(path, ent->d_name);
 		if (finger != NULL)
-			HASH_ADD_STR(f, hash, finger);
+			HASH_ADD_STR(*f, hash, finger);
 	}
 
 	closedir(d);
 
-	return (f);
+	return (EPKG_OK);
 }
 
 static int
@@ -293,9 +294,9 @@ repo_archive_extract_file(int fd, const char *file, const char *dest, struct pkg
 				s->sig = malloc(s->siglen);
 				archive_read_data(a, s->sig, s->siglen);
 			}
-			if (has_ext(archive_entry_pathname(ae), ".cert")) {
+			if (has_ext(archive_entry_pathname(ae), ".pub")) {
 				snprintf(key, MAXPATHLEN, "%.*s",
-				    (int) strlen(archive_entry_pathname(ae)) - 5,
+				    (int) strlen(archive_entry_pathname(ae)) - 4,
 				    archive_entry_pathname(ae));
 				HASH_FIND_STR(sc, key, s);
 				if (s == NULL) {
@@ -336,7 +337,7 @@ repo_archive_extract_file(int fd, const char *file, const char *dest, struct pkg
 
 		/* load fingerprints */
 		snprintf(path, MAXPATHLEN, "%s/trusted", pkg_repo_fingerprints(repo));
-		if ((trusted = load_fingerprints(path)) == NULL) {
+		if ((load_fingerprints(path, &trusted)) != EPKG_OK) {
 			pkg_emit_error("Error loading trusted certificates");
 			rc = EPKG_FATAL;
 			goto cleanup;
@@ -349,7 +350,7 @@ repo_archive_extract_file(int fd, const char *file, const char *dest, struct pkg
 		}
 
 		snprintf(path, MAXPATHLEN, "%s/revoked", pkg_repo_fingerprints(repo));
-		if ((revoked = load_fingerprints(path)) == NULL) {
+		if ((load_fingerprints(path, &revoked)) != EPKG_OK) {
 			pkg_emit_error("Error loading revoked certificates");
 			rc = EPKG_FATAL;
 			goto cleanup;
@@ -393,7 +394,7 @@ repo_archive_extract_file(int fd, const char *file, const char *dest, struct pkg
 				nbgood++;
 		}
 
-		if (nbgood != 0) {
+		if (nbgood == 0) {
 			pkg_emit_error("No trusted certificate has been used "
 			    "to sign the repository");
 			rc = EPKG_FATAL;
