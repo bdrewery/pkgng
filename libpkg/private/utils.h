@@ -86,6 +86,7 @@ int is_dir(const char *);
 int is_conf_file(const char *path, char *newpath, size_t len);
 
 void sha256_buf(char *, size_t len, char[SHA256_DIGEST_LENGTH * 2 +1]);
+void sha256_buf_bin(char *, size_t len, char[SHA256_DIGEST_LENGTH]);
 int sha256_file(const char *, char[SHA256_DIGEST_LENGTH * 2 +1]);
 int sha256_fd(int fd, char[SHA256_DIGEST_LENGTH * 2 +1]);
 int md5_file(const char *, char[MD5_DIGEST_LENGTH * 2 +1]);
@@ -106,6 +107,8 @@ struct dns_srvinfo *
 
 int set_nameserver(const char *nsname);
 ucl_object_t *yaml_to_ucl(const char *file, const char *buffer, size_t len);
+void set_blocking(int fd);
+void set_nonblocking(int fd);
 
 
 #endif
