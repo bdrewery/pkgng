@@ -510,8 +510,9 @@ pkg_set_files_from_object(struct pkg *pkg, ucl_object_t *obj)
 		else if (!strcasecmp(key, "sum") && cur->type == UCL_STRING &&
 		    strlen(ucl_object_tostring(cur)) == 64)
 			sum = ucl_object_tostring(cur);
-		else if (!strcasecmp(key, "perm") && cur->type == UCL_STRING) {
-			if ((set = setmode(ucl_object_tostring(cur))) == NULL)
+		else if (!strcasecmp(key, "perm") &&
+		    (cur->type == UCL_STRING || cur->type == UCL_INT)) {
+			if ((set = setmode(ucl_object_tostring_forced(cur))) == NULL)
 				pkg_emit_error("Not a valid mode: %s",
 				    ucl_object_tostring(cur));
 			else
@@ -548,8 +549,9 @@ pkg_set_dirs_from_object(struct pkg *pkg, ucl_object_t *obj)
 			uname = ucl_object_tostring(cur);
 		else if (!strcasecmp(key, "gname") && cur->type == UCL_STRING)
 			gname = ucl_object_tostring(cur);
-		else if (!strcasecmp(key, "perm") && cur->type == UCL_STRING) {
-			if ((set = setmode(ucl_object_tostring(cur))) == NULL)
+		else if (!strcasecmp(key, "perm") &&
+		    (cur->type == UCL_STRING || cur->type == UCL_INT)) {
+			if ((set = setmode(ucl_object_tostring_forced(cur))) == NULL)
 				pkg_emit_error("Not a valid mode: %s",
 				    ucl_object_tostring(cur));
 			else
@@ -808,7 +810,7 @@ emit_manifest(struct pkg *pkg, char **out, short flags)
 	const char *script_types = NULL;
 	lic_t licenselogic;
 	int64_t flatsize, pkgsize;
-	ucl_object_t *obj = NULL, *map, *seq, *submap;
+	ucl_object_t *obj, *map, *seq, *submap;
 	ucl_object_t *top = NULL;
 
 	pkg_get(pkg, PKG_NAME, &name, PKG_ORIGIN, &pkgorigin,
@@ -1004,6 +1006,9 @@ emit_manifest(struct pkg *pkg, char **out, short flags)
 		*out = ucl_object_emit(top, UCL_EMIT_JSON_COMPACT);
 
 	ucl_object_free(top);
+
+	/* FIXME: avoid gcc to complain about -Werror=unused-but-set-variable */
+	(void)obj;
 
 	return (EPKG_OK);
 }

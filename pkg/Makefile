@@ -40,8 +40,8 @@ BINDIR=		${PREFIX}/sbin
 MANDIR=		${PREFIX}/man/man
 
 .if exists(${.CURDIR}/../.git) && exists(/usr/local/bin/git)
-GITHASH!=	cd ${.CURDIR} && git rev-parse HEAD
-CFLAGS+=	-DGITHASH="\" ${GITHASH}\""
+GITHASH!=	cd ${.CURDIR} && git rev-parse --short HEAD
+CFLAGS+=	-DGITHASH="\"${GITHASH}\""
 .endif
 
 .if defined(DEBUG_FLAGS)
@@ -78,6 +78,10 @@ LDADD+=		-L../libpkg \
 LDADD_STATIC=	-L../external/sqlite \
 		-L../external/libyaml \
 		-L../external/libucl
+
+.if !exists(/usr/lib/libelf.so)
+LDADD_STATIC+=		-L../external/libelf
+.endif
 
 LDADD_STATIC+=	-lsqlite3 \
 		-larchive \
