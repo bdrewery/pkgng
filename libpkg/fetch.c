@@ -543,7 +543,6 @@ pkg_fetch_file_to_fd(struct pkg_repo *repo, const char *url, int dest, time_t *t
 	int64_t		 max_retry, retry;
 	int64_t		 fetch_timeout;
 	time_t		 begin_dl;
-	time_t		 now;
 	time_t		 last = 0;
 	char		 buf[10240];
 	char		*doc = NULL;
@@ -656,12 +655,14 @@ pkg_fetch_file_to_fd(struct pkg_repo *repo, const char *url, int dest, time_t *t
 		sz = st.size;
 	}
 
-	now = begin_dl = time(NULL);
+	begin_dl = time(NULL);
 	if (repo != NULL) {
 		repo->tofetch = sz;
 		repo->fetched = 0;
 	}
 	while (done < sz) {
+		time_t	now;
+
 		if ((r = fread(buf, 1, sizeof(buf), remote)) < 1)
 			break;
 

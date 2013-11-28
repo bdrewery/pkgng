@@ -292,8 +292,8 @@ static struct config_entry c[] = {
 static bool parsed = false;
 static size_t c_size = sizeof(c) / sizeof(struct config_entry);
 
-static void pkg_config_kv_free(struct pkg_config_kv *);
-static struct pkg_repo *pkg_repo_new(const char *name, const char *url);
+static void		 pkg_config_kv_free(struct pkg_config_kv *);
+static struct pkg_repo	*pkg_repo_new(const char *name, const char *url);
 
 static void
 connect_evpipe(const char *evpipe) {
@@ -1295,25 +1295,22 @@ pkg_shutdown(void)
 }
 
 int
-pkg_repos_count(bool activated_only)
+pkg_repos_total_count(void)
 {
-	int	count;
 
-	if (!activated_only) {
-		struct pkg_repo *r = NULL;
+	return (HASH_COUNT(repos));
+}
 
-		count = 0;
+int
+pkg_repos_activated_count(void)
+{
+	struct pkg_repo *r = NULL;
+	int count = 0;
 
-		while(1) {
-			HASH_NEXT(repos, r);
-			if (r == NULL)
-				break;
-
-			if (r->enable)
-				count++;
-		}
-	} else
-		count = HASH_COUNT(repos);
+	for (r = repos; r != NULL; r = r->hh.next) {
+		if (r->enable)
+			count++;
+	}
 
 	return (count);
 }

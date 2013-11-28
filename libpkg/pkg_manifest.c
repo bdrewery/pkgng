@@ -97,8 +97,8 @@ static struct manifest_key {
 	{ "name",                PKG_NAME,                UCL_STRING, pkg_string},
 	{ "name",                PKG_NAME,                UCL_INT,    pkg_string},
 	{ "options",             PKG_OPTIONS,             UCL_OBJECT, pkg_object},
-	{ "option_defaults",     PKG_OPTION_DEFAULTS,     UCL_STRING, pkg_object},
-	{ "option_descriptions", PKG_OPTION_DESCRIPTIONS, UCL_STRING, pkg_object},
+	{ "option_defaults",     PKG_OPTION_DEFAULTS,     UCL_OBJECT, pkg_object},
+	{ "option_descriptions", PKG_OPTION_DESCRIPTIONS, UCL_OBJECT, pkg_object},
 	{ "origin",              PKG_ORIGIN,              UCL_STRING, pkg_string},
 	{ "path",                PKG_REPOPATH,            UCL_STRING, pkg_string},
 	{ "pkgsize",             PKG_PKGSIZE,             UCL_INT,    pkg_int},
@@ -378,7 +378,7 @@ pkg_object(struct pkg *pkg, ucl_object_t *obj, int attr)
 		key = ucl_object_key(cur);
 		switch (attr) {
 		case PKG_DEPS:
-			if (cur->type != UCL_OBJECT)
+			if (cur->type != UCL_OBJECT && cur->type != UCL_ARRAY)
 				pkg_emit_error("Skipping malformed dependency %s",
 				    key);
 			else
@@ -434,11 +434,11 @@ pkg_object(struct pkg *pkg, ucl_object_t *obj, int attr)
 				   key);
 			break;
 		case PKG_OPTIONS:
-			if (cur->type == UCL_STRING || cur->type == UCL_BOOLEAN)
-				pkg_addoption(pkg, key, ucl_object_tostring_forced(cur));
-			else
+			if (cur->type != UCL_STRING && cur->type != UCL_BOOLEAN)
 				pkg_emit_error("Skipping malformed option %s",
 				    key);
+			else
+				pkg_addoption(pkg, key, ucl_object_tostring_forced(cur));
 			break;
 		case PKG_OPTION_DEFAULTS:
 			if (cur->type != UCL_STRING)
@@ -573,8 +573,8 @@ pkg_set_dirs_from_object(struct pkg *pkg, ucl_object_t *obj)
 static int
 pkg_set_deps_from_object(struct pkg *pkg, ucl_object_t *obj)
 {
-	ucl_object_t *cur;
-	ucl_object_iter_t it = NULL;
+	ucl_object_t *cur, *self;
+	ucl_object_iter_t it = NULL, it2;
 	const char *origin = NULL;
 	const char *version = NULL;
 	const char *key;
@@ -582,29 +582,31 @@ pkg_set_deps_from_object(struct pkg *pkg, ucl_object_t *obj)
 	char vinteger[BUFSIZ];
 
 	pkg_debug(2, "Found %s", ucl_object_key(obj));
-	while ((cur = ucl_iterate_object(obj, &it, true))) {
-		key = ucl_object_key(cur);
-		if (cur->type != UCL_STRING) {
-			/* accept version to be an integer */
-			if (cur->type == UCL_INT && strcasecmp(key, "version") == 0) {
-				vint = ucl_object_toint(cur);
-				snprintf(vinteger, sizeof(vinteger), "%"PRId64, vint);
+	while ((self = ucl_iterate_object(obj, &it, (obj->type == UCL_ARRAY)))) {
+		it2 = NULL;
+		while ((cur = ucl_iterate_object(self, &it2, true))) {
+			key = ucl_object_key(cur);
+			if (cur->type != UCL_STRING) {
+				/* accept version to be an integer */
+				if (cur->type == UCL_INT && strcasecmp(key, "version") == 0) {
+					vint = ucl_object_toint(cur);
+					snprintf(vinteger, sizeof(vinteger), "%"PRId64, vint);
+					continue;
+				}
+
+				pkg_emit_error("Skipping malformed dependency entry "
+						"for %s", ucl_object_key(obj));
 				continue;
 			}
-
-			pkg_emit_error("Skipping malformed dependency entry "
-			    "for %s", ucl_object_key(obj));
-			continue;
+			if (strcasecmp(key, "origin") == 0)
+				origin = ucl_object_tostring(cur);
+			if (strcasecmp(key, "version") == 0)
+				version = ucl_object_tostring(cur);
 		}
-		if (strcasecmp(key, "origin") == 0)
-			origin = ucl_object_tostring(cur);
-		if (strcasecmp(key, "version") == 0)
-			version = ucl_object_tostring(cur);
-	}
-	if (origin != NULL && (version != NULL || vint > 0))
-		pkg_adddep(pkg, ucl_object_key(obj), origin, vint > 0 ? vinteger : version, false);
-	else {
-		pkg_emit_error("Skipping malformed dependency %s", ucl_object_key(obj));
+		if (origin != NULL && (version != NULL || vint > 0))
+			pkg_adddep(pkg, ucl_object_key(obj), origin, vint > 0 ? vinteger : version, false);
+		else
+			pkg_emit_error("Skipping malformed dependency %s", ucl_object_key(obj));
 	}
 
 	return (EPKG_OK);
@@ -1046,13 +1048,13 @@ pkg_emit_manifest_generic(struct pkg *pkg, void *out, short flags,
 
 	rc = emit_manifest(pkg, &output, flags);
 
-	if (out_is_a_sbuf) {
-		if (sign_ctx != NULL)
-			SHA256_Update(sign_ctx, output, strlen(output));
+	if (sign_ctx != NULL)
+		SHA256_Update(sign_ctx, output, strlen(output));
+
+	if (out_is_a_sbuf)
 		sbuf_cat(out, output);
-	} else {
+	else
 		fprintf(out, "%s\n", output);
-	}
 
 	if (pdigest != NULL) {
 		SHA256_Final(digest, sign_ctx);
