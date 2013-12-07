@@ -290,7 +290,7 @@ static struct config_entry c[] = {
 };
 
 static bool parsed = false;
-static size_t c_size = sizeof(c) / sizeof(struct config_entry);
+static size_t c_size = NELEM(c);
 
 static void		 pkg_config_kv_free(struct pkg_config_kv *);
 static struct pkg_repo	*pkg_repo_new(const char *name, const char *url);
@@ -365,12 +365,16 @@ obj_walk_object(ucl_object_t *obj, struct pkg_config *conf)
 	struct pkg_config_kv *kv;
 	ucl_object_t *cur;
 	ucl_object_iter_t it = NULL;
+	const char *key;
 
 	while ((cur = ucl_iterate_object(obj, &it, true))) {
 		if (cur->type != UCL_STRING)
 			continue;
 		kv = malloc(sizeof(struct pkg_config_kv));
-		kv->key = strdup(ucl_object_key(cur));
+		key = ucl_object_key(cur);
+		if (key == NULL)
+			continue;
+		kv->key = strdup(key);
 		kv->value = strdup(ucl_object_tostring(cur));
 		HASH_ADD_STR(conf->kvlist, value, kv);
 	}
@@ -389,6 +393,8 @@ pkg_object_walk(ucl_object_t *obj, struct pkg_config *conf_by_key)
 	while ((cur = ucl_iterate_object(obj, &it, true))) {
 		sbuf_clear(b);
 		key = ucl_object_key(cur);
+		if (key == NULL)
+			continue;
 		for (i = 0; i < strlen(key); i++)
 			sbuf_putc(b, toupper(key[i]));
 		sbuf_finish(b);
@@ -693,6 +699,9 @@ add_repo(ucl_object_t *obj, struct pkg_repo *r, const char *rname)
 
 	while ((cur = ucl_iterate_object(obj, &it, true))) {
 		key = ucl_object_key(cur);
+		if (key == NULL)
+			continue;
+
 		if (strcasecmp(key, "url") == 0) {
 			if (cur->type != UCL_STRING) {
 				pkg_emit_error("Expecting a string for the "
@@ -809,6 +818,8 @@ walk_repo_obj(ucl_object_t *obj)
 
 	while ((cur = ucl_iterate_object(obj, &it, true))) {
 		key = ucl_object_key(cur);
+		if (key == NULL)
+			continue;
 		r = pkg_repo_find_ident(key);
 		if (r != NULL)
 			pkg_debug(1, "PkgConfig: overwriting repository %s", key);
@@ -827,6 +838,7 @@ load_repo_file(const char *repofile)
 	p = ucl_parser_new(0);
 
 	if (!ucl_parser_add_file(p, repofile)) {
+		printf("%s\n", ucl_parser_get_error(p));
 		if (errno == ENOENT) {
 			ucl_parser_free(p);
 			return;
@@ -1102,6 +1114,8 @@ pkg_init(const char *path, const char *reposdir)
 		if (obj->type == UCL_OBJECT) {
 			while ((cur = ucl_iterate_object(obj, &it, true))) {
 				key = ucl_object_key(cur);
+				if (key == NULL)
+					continue;
 				if (strcasecmp(key, "REPOS_DIR") == 0 &&
 				    cur->type != UCL_ARRAY)
 					fallback = true;

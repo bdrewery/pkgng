@@ -44,6 +44,11 @@ GITHASH!=	cd ${.CURDIR} && git rev-parse --short HEAD
 CFLAGS+=	-DGITHASH="\"${GITHASH}\""
 .endif
 
+.if defined(PKG_PORTSDIR)
+CFLAGS+=	-DPORTSDIR=\"${PKG_PORTSDIR}\"
+MANFILTER=	sed -e "s|/usr/ports|${PKG_PORTSDIR}|g"
+.endif
+
 .if defined(DEBUG_FLAGS)
 .if ${DEBUG_FLAGS} == 1
 DEBUG_FLAGS=	-ggdb -O0
@@ -58,10 +63,9 @@ DEBUG_FLAGS+=	-pg
 CFLAGS+=	-I../libpkg \
 		-I${.CURDIR}/../external/uthash \
 		-I${.CURDIR}/../external/expat/lib
-LDADD+=		-L../libpkg \
-		-L../external/expat \
-		-ledit \
+LDADD+=		-L${.OBJDIR}/../libpkg \
 		-lpkg \
+		-ledit \
 		-larchive \
 		-lutil \
 		-lpthread \
@@ -72,31 +76,22 @@ LDADD+=		-L../libpkg \
 		-lmd \
 		-lz \
 		-lbz2 \
-		-llzma \
-		-lexpat
+		-llzma
 
-LDADD_STATIC=	-L../external/sqlite \
-		-L../external/libyaml \
-		-L../external/libucl
-
-.if !exists(/usr/lib/libelf.so)
-LDADD_STATIC+=		-L../external/libelf
+.if exists(/usr/lib/libelf.so)
+LDADD_STATIC+=	-lelf
 .endif
 
-LDADD_STATIC+=	-lsqlite3 \
-		-larchive \
+LDADD_STATIC+=	-larchive \
 		-lsbuf \
 		-lfetch \
 		-lpthread \
-		-lelf \
 		-lssl \
 		-lcrypto \
 		-lmd \
 		-lz \
 		-lbz2 \
-		-llzma \
-		-lyaml \
-		-lucl
+		-llzma
 
 .if !exists(/usr/include/jail.h)
 CFLAGS+=	-DNO_LIBJAIL
@@ -119,6 +114,7 @@ MAN=	pkg.8 \
 	pkg-autoremove.8 \
 	pkg-backup.8 \
 	pkg-check.8 \
+	pkg-config.8 \
 	pkg-convert.8 \
 	pkg-clean.8 \
 	pkg-create.8 \
