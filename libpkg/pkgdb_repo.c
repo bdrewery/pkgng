@@ -197,7 +197,7 @@ file_exists(sqlite3_context *ctx, int argc, sqlite3_value **argv)
 		return;
 	}
 
-	snprintf(fpath, MAXPATHLEN, "%s/%s", path, sqlite3_value_text(argv[0]));
+	snprintf(fpath, sizeof(fpath), "%s/%s", path, sqlite3_value_text(argv[0]));
 
 	if (access(fpath, R_OK) == 0) {
 		sha256_file(fpath, cksum);
@@ -775,7 +775,7 @@ upgrade_repo_schema(struct pkgdb *db, const char *database, int current_version)
 	for (version = current_version;
 	     version < REPO_SCHEMA_VERSION;
 	     version = next_version)  {
-		pkg_debug(1, "Upgrading remote database from %d to %d",
+		pkg_debug(1, "Upgrading repo database schema from %d to %d",
 		    version, next_version);
 		ret = apply_repo_change(db, database, repo_upgrades,
 					"upgrade", version, &next_version);
@@ -795,7 +795,7 @@ downgrade_repo_schema(struct pkgdb *db, const char *database, int current_versio
 	for (version = current_version;
 	     version > REPO_SCHEMA_VERSION;
 	     version = next_version)  {
-		pkg_debug(1, "Upgrading remote database from %d to %d",
+		pkg_debug(1, "Downgrading repo database schema from %d to %d",
 		    version, next_version);
 		ret = apply_repo_change(db, database, repo_downgrades,
 					"downgrade", version, &next_version);
