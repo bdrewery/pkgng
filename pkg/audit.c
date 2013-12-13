@@ -206,12 +206,10 @@ fetch_and_extract(const char *src, const char *dest, bool xml)
 
 	cleanup:
 	unlink(tmp);
-	if (a != NULL)
-#if ARCHIVE_VERSION_NUMBER < 3000002
-		archive_read_finish(a);
-#else
+	if (a != NULL) {
+		archive_read_close(a);
 		archive_read_free(a);
-#endif
+	}
 	if (fd >= 0)
 		close(fd);
 
