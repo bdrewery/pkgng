@@ -103,6 +103,7 @@ LIBPKGSRCS=	${PC} \
 		pkg_attributes.c \
 		pkg_config.c \
 		pkg_create.c \
+		pkg_cudf.c \
 		pkg_delete.c \
 		pkg_elf.c \
 		pkg_event.c \
@@ -111,6 +112,7 @@ LIBPKGSRCS=	${PC} \
 		pkg_ports.c \
 		pkg_printf.c \
 		pkg_repo.c \
+		pkg_solve.c \
 		pkg_status.c \
 		pkg_version.c \
 		pkgdb.c \

@@ -31,6 +31,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <dlfcn.h>
+#include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -286,6 +287,18 @@ static struct config_entry c[] = {
 		"ALIAS",
 		NULL,
 		"Command aliases",
+	},
+	[PKG_CONFIG_CUDF_SOLVER] = {
+		PKG_CONFIG_STRING,
+		"CUDF_SOLVER",
+		NULL,
+		"Experimental: tells pkg to use an external CUDF solver",
+	},
+	[PKG_CONFIG_SAT_SOLVER] = {
+		PKG_CONFIG_STRING,
+		"SAT_SOLVER",
+		NULL,
+		"Experimental: tells pkg to use an external SAT solver",
 	},
 };
 
@@ -920,6 +933,7 @@ load_repositories(const char *repodir)
 		load_repo_files(pkg_config_value(v));
 }
 
+
 int
 pkg_init(const char *path, const char *reposdir)
 {
@@ -1239,6 +1253,8 @@ pkg_repo_new(const char *name, const char *url)
 	struct pkg_repo *r;
 
 	r = calloc(1, sizeof(struct pkg_repo));
+	r->type = REPO_BINARY_PKGS;
+	r->update = repo_update_binary_pkgs;
 	r->url = subst_packagesite_str(url);
 	r->signature_type = SIG_NONE;
 	r->mirror_type = NOMIRROR;
