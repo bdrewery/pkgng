@@ -1,4 +1,5 @@
 /*-
+ * Copyright (c) 2012-2014 Baptiste Daroussin <bapt@FreeBSD.org>
  * Copyright (c) 2012 Julien Laffaye <jlaffaye@FreeBSD.org>
  * All rights reserved.
  *
@@ -576,10 +577,47 @@ pkg_update_increment_item_new(struct pkg_increment_task_item **head, const char 
 	HASH_ADD_KEYPTR(hh, *head, item->origin, strlen(item->origin), item);
 }
 
+static void __unused
+pkg_parse_conflicts_file(FILE *f, sqlite3 *sqlite)
+{
+	size_t linecap = 0;
+	ssize_t linelen;
+	char *linebuf = NULL, *p, **deps;
+	const char *origin, *pdep;
+	int ndep, i;
+	const char conflicts_clean_sql[] = ""
+			"DELETE FROM pkg_conflicts;";
+
+	pkg_debug(4, "pkg_parse_conflicts_file: running '%s'", conflicts_clean_sql);
+	(void)sql_exec(sqlite, conflicts_clean_sql);
+
+	while ((linelen = getline(&linebuf, &linecap, f)) > 0) {
+		p = linebuf;
+		origin = strsep(&p, ":");
+		/* Check dependencies number */
+		pdep = p;
+		ndep = 1;
+		while (*pdep != '\0') {
+			if (*pdep == ',')
+				ndep ++;
+			pdep ++;
+		}
+		deps = malloc(sizeof(char *) * ndep);
+		for (i = 0; i < ndep; i ++) {
+			deps[i] = strsep(&p, ",\n");
+		}
+		pkgdb_repo_register_conflicts(origin, deps, ndep, sqlite);
+		free(deps);
+	}
+
+	if (linebuf != NULL)
+		free(linebuf);
+}
+
 static int
 pkg_update_incremental(const char *name, struct pkg_repo *repo, time_t *mtime)
 {
-	FILE *fmanifest = NULL, *fdigests = NULL;
+	FILE *fmanifest = NULL, *fdigests = NULL, *fconflicts = NULL;
 	sqlite3 *sqlite = NULL;
 	struct pkg *pkg = NULL;
 	int rc = EPKG_FATAL;
@@ -636,6 +674,9 @@ pkg_update_incremental(const char *name, struct pkg_repo *repo, time_t *mtime)
 		goto cleanup;
 	packagesite_t = digest_t;
 	*mtime = packagesite_t > digest_t ? packagesite_t : digest_t;
+	fconflicts = repo_fetch_remote_extract_tmp(repo,
+			repo_conflicts_archive, "txz", &local_t,
+			&rc, repo_conflicts_file);
 	fseek(fmanifest, 0, SEEK_END);
 	len = ftell(fmanifest);
 
@@ -757,8 +798,12 @@ cleanup:
 		fclose(fmanifest);
 	if (fdigests)
 		fclose(fdigests);
+	if (fconflicts)
+		fclose(fconflicts);
 	if (map != MAP_FAILED)
 		munmap(map, len);
+	if (linebuf != NULL)
+		free(linebuf);
 
 	pkgdb_repo_close(sqlite, rc == EPKG_OK);
 
@@ -766,7 +811,7 @@ cleanup:
 }
 
 int
-pkg_update(struct pkg_repo *repo, bool force)
+repo_update_binary_pkgs(struct pkg_repo *repo, bool force)
 {
 	char repofile[MAXPATHLEN];
 
@@ -863,4 +908,10 @@ cleanup:
 	}
 
 	return (res);
+}
+
+int
+pkg_update(struct pkg_repo *repo, bool force)
+{
+	return (repo->update(repo, force));
 }

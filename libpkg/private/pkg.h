@@ -2,6 +2,7 @@
  * Copyright (c) 2011-2012 Baptiste Daroussin <bapt@FreeBSD.org>
  * Copyright (c) 2011-2012 Julien Laffaye <jlaffaye@FreeBSD.org>
  * Copyright (c) 2013 Matthew Seaman <matthew@FreeBSD.org>
+ * Copyright (c) 2013 Vsevolod Stakhov <vsevolod@FreeBSD.org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -126,6 +127,8 @@ struct pkg {
 	struct pkg_shlib	*shlibs_required;
 	struct pkg_shlib	*shlibs_provided;
 	struct pkg_note		*annotations;
+	struct pkg_conflict *conflicts;
+	struct pkg_provide	*provides;
 	unsigned       	 flags;
 	int64_t		 rowid;
 	int64_t		 time;
@@ -141,6 +144,16 @@ struct pkg_dep {
 	struct sbuf	*version;
 	bool		 locked;
 	UT_hash_handle	 hh;
+};
+
+struct pkg_conflict {
+	struct sbuf		*origin;
+	UT_hash_handle	hh;
+};
+
+struct pkg_provide {
+	struct sbuf		*provide;
+	UT_hash_handle	hh;
 };
 
 struct pkg_license {
@@ -183,10 +196,31 @@ struct pkg_option {
 	UT_hash_handle	hh;
 };
 
+struct pkg_job_request {
+	struct pkg *pkg;
+	bool skip;
+	UT_hash_handle hh;
+};
+
+struct pkg_job_seen {
+	struct pkg *pkg;
+	const char *digest;
+	UT_hash_handle hh;
+};
+
+struct pkg_job_universe_item {
+	struct pkg *pkg;
+	UT_hash_handle hh;
+	struct pkg_job_universe_item *next;
+};
+
 struct pkg_jobs {
-	struct pkg	*jobs;
-	struct pkg 	*bulk;
-	struct pkg	*seen;
+	struct pkg_job_universe_item *universe;
+	struct pkg_job_request	*request_add;
+	struct pkg_job_request	*request_delete;
+	struct pkg *jobs_add;
+	struct pkg *jobs_delete;
+	struct pkg_job_seen *seen;
 	struct pkgdb	*db;
 	pkg_jobs_t	 type;
 	pkg_flags	 flags;
@@ -259,6 +293,7 @@ struct http_mirror {
 };
 
 struct pkg_repo {
+	repo_t type;
 	char *name;
 	char *url;
 	char *pubkey;
@@ -284,6 +319,9 @@ struct pkg_repo {
 	} sshio;
 	size_t fetched;
 	size_t tofetch;
+
+	int (*update)(struct pkg_repo *, bool);
+
 	bool enable;
 	UT_hash_handle hh;
 };
@@ -364,6 +402,12 @@ int pkg_jobs_resolv(struct pkg_jobs *jobs);
 int pkg_shlib_new(struct pkg_shlib **);
 void pkg_shlib_free(struct pkg_shlib *);
 
+int pkg_conflict_new(struct pkg_conflict **);
+void pkg_conflict_free(struct pkg_conflict *);
+
+int pkg_provide_new(struct pkg_provide **);
+void pkg_provide_free(struct pkg_provide *);
+
 int pkg_annotation_new(struct pkg_note **);
 void pkg_annotation_free(struct pkg_note *);
 
@@ -411,10 +455,13 @@ int pkgdb_load_group(struct pkgdb *db, struct pkg *pkg);
 int pkgdb_load_shlib_required(struct pkgdb *db, struct pkg *pkg);
 int pkgdb_load_shlib_provided(struct pkgdb *db, struct pkg *pkg);
 int pkgdb_load_annotations(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_conflicts(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_provides(struct pkgdb *db, struct pkg *pkg);
 
 int pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg, int complete, int forced);
 int pkgdb_update_shlibs_required(struct pkg *pkg, int64_t package_id, sqlite3 *s);
 int pkgdb_update_shlibs_provided(struct pkg *pkg, int64_t package_id, sqlite3 *s);
+int pkgdb_update_provides(struct pkg *pkg, int64_t package_id, sqlite3 *s);
 int pkgdb_insert_annotations(struct pkg *pkg, int64_t package_id, sqlite3 *s);
 int pkgdb_register_finale(struct pkgdb *db, int retcode);
 
@@ -426,4 +473,7 @@ int pkg_emit_manifest_sbuf(struct pkg*, struct sbuf *, short, char **);
 int pkg_emit_filelist(struct pkg *, FILE *);
 
 int do_extract_mtree(char *mtree, const char *prefix);
+
+int repo_update_binary_pkgs(struct pkg_repo *repo, bool force);
+
 #endif

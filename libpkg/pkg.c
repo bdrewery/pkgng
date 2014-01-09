@@ -61,7 +61,7 @@ static struct _fields {
 	[PKG_OLD_VERSION] = {"oldversion", PKG_REMOTE, 1},
 	[PKG_REPONAME] = {"reponame", PKG_REMOTE, 1},
 	[PKG_REPOURL] = {"repourl", PKG_REMOTE, 1},
-	[PKG_DIGEST] = {"manifestdigest", PKG_REMOTE, 1},
+	[PKG_DIGEST] = {"manifestdigest", PKG_REMOTE|PKG_INSTALLED, 1},
 	[PKG_REASON] = {"reason", PKG_REMOTE, 1}
 };
 
@@ -462,6 +462,22 @@ pkg_shlibs_provided(const struct pkg *pkg, struct pkg_shlib **s)
 	assert(pkg != NULL);
 
 	HASH_NEXT(pkg->shlibs_provided, (*s));
+}
+
+int
+pkg_conflicts(const struct pkg *pkg, struct pkg_conflict **c)
+{
+	assert(pkg != NULL);
+
+	HASH_NEXT(pkg->conflicts, (*c));
+}
+
+int
+pkg_provides(const struct pkg *pkg, struct pkg_provide **c)
+{
+	assert(pkg != NULL);
+
+	HASH_NEXT(pkg->provides, (*c));
 }
 
 int
@@ -974,6 +990,55 @@ pkg_addshlib_provided(struct pkg *pkg, const char *name)
 }
 
 int
+pkg_addconflict(struct pkg *pkg, const char *name)
+{
+	struct pkg_conflict *c = NULL;
+	const char *origin;
+
+	assert(pkg != NULL);
+	assert(name != NULL && name[0] != '\0');
+
+	HASH_FIND_STR(pkg->conflicts, __DECONST(char *, name), c);
+	/* silently ignore duplicates in case of conflicts */
+	if (c != NULL)
+		return (EPKG_OK);
+
+	pkg_conflict_new(&c);
+	sbuf_set(&c->origin, name);
+	pkg_get(pkg, PKG_ORIGIN, &origin);
+	pkg_debug(3, "Pkg: add a new conflict origin: %s, with %s", origin, name);
+
+	HASH_ADD_KEYPTR(hh, pkg->conflicts,
+	    __DECONST(char *, pkg_conflict_origin(c)),
+	    sbuf_size(c->origin), c);
+
+	return (EPKG_OK);
+}
+
+int
+pkg_addprovide(struct pkg *pkg, const char *name)
+{
+	struct pkg_provide *p = NULL;
+
+	assert(pkg != NULL);
+	assert(name != NULL && name[0] != '\0');
+
+	HASH_FIND_STR(pkg->provides, __DECONST(char *, name), p);
+	/* silently ignore duplicates in case of conflicts */
+	if (p != NULL)
+		return (EPKG_OK);
+
+	pkg_provide_new(&p);
+	sbuf_set(&p->provide, name);
+
+	HASH_ADD_KEYPTR(hh, pkg->provides,
+	    __DECONST(char *, pkg_provide_name(p)),
+	    sbuf_size(p->provide), p);
+
+	return (EPKG_OK);
+}
+
+int
 pkg_addannotation(struct pkg *pkg, const char *tag, const char *value)
 {
 	struct pkg_note *an = NULL;
@@ -1064,6 +1129,10 @@ pkg_list_count(const struct pkg *pkg, pkg_list list)
 		return (HASH_COUNT(pkg->shlibs_provided));
 	case PKG_ANNOTATIONS:
 		return (HASH_COUNT(pkg->annotations));
+	case PKG_CONFLICTS:
+		return (HASH_COUNT(pkg->conflicts));
+	case PKG_PROVIDES:
+		return (HASH_COUNT(pkg->provides));
 	}
 	
 	return (0);
@@ -1119,6 +1188,14 @@ pkg_list_free(struct pkg *pkg, pkg_list list)  {
 	case PKG_ANNOTATIONS:
 		HASH_FREE(pkg->annotations, pkg_note, pkg_annotation_free);
 		pkg->flags &= ~PKG_LOAD_ANNOTATIONS;
+		break;
+	case PKG_CONFLICTS:
+		HASH_FREE(pkg->conflicts, pkg_conflict, pkg_conflict_free);
+		pkg->flags &= ~PKG_LOAD_CONFLICTS;
+		break;
+	case PKG_PROVIDES:
+		HASH_FREE(pkg->provides, pkg_provide, pkg_provide_free);
+		pkg->flags &= ~PKG_LOAD_PROVIDES;
 		break;
 	}
 }
