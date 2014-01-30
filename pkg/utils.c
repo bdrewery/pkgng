@@ -2,7 +2,8 @@
  * Copyright (c) 2011-2012 Baptiste Daroussin <bapt@FreeBSD.org>
  * Copyright (c) 2011-2012 Julien Laffaye <jlaffaye@FreeBSD.org>
  * Copyright (c) 2011-2012 Marin Atanasov Nikolov <dnaeon@gmail.com>
- * Copyright (c) 2012-2013 Matthew Seaman <matthew@FreeBSD.org>
+ * Copyright (c) 2012-2014 Matthew Seaman <matthew@FreeBSD.org>
+ * Copyright (c) 2013-2014 Vsevolod Stakhov <vsevolod@FreeBSD.org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -300,6 +301,11 @@ print_info(struct pkg * const pkg, uint64_t options)
 			if (print_tag)
 				printf("%-15s: ", "Name");
 			pkg_printf("%n\n", pkg);
+			break;
+		case INFO_INSTALLED:
+			if (print_tag)
+				printf("%-15s: ", "Installed on");
+			pkg_printf("%t%{%+%}\n", pkg);
 			break;
 		case INFO_VERSION:
 			if (print_tag)
@@ -651,7 +657,7 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 	void *iter = NULL;
 	char size[7];
 	va_list ap;
-	pkg_jobs_t type, inv_type;
+	pkg_jobs_t type, inv_type = PKG_JOBS_DEINSTALL;
 	int64_t dlsize, oldsize, newsize;
 
 	dlsize = oldsize = newsize = 0;
@@ -661,22 +667,16 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 	vprintf(msg, ap);
 	va_end(ap);
 
-	switch (type) {
-	case PKG_JOBS_INSTALL:
-	case PKG_JOBS_UPGRADE:
-		inv_type = PKG_JOBS_DEINSTALL;
-		break;
-	default:
-		inv_type = PKG_JOBS_INSTALL;
-		break;
-	}
-
 	while ((pkg = pkg_jobs_add_iter(jobs, &iter))) {
 		print_jobs_summary_pkg(pkg, type, &oldsize, &newsize, &dlsize);
 	}
 
 	iter = NULL;
 	while ((pkg = pkg_jobs_delete_iter(jobs, &iter))) {
+		print_jobs_summary_pkg(pkg, inv_type, &oldsize, &newsize, &dlsize);
+	}
+	iter = NULL;
+	while ((pkg = pkg_jobs_upgrade_iter(jobs, &iter))) {
 		print_jobs_summary_pkg(pkg, inv_type, &oldsize, &newsize, &dlsize);
 	}
 
