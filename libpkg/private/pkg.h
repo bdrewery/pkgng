@@ -204,7 +204,7 @@ struct pkg_job_request {
 };
 
 struct pkg_solved {
-	struct pkg *pkg;
+	struct pkg *pkg[2];
 	int priority;
 	struct pkg_solved *prev, *next;
 };
@@ -228,11 +228,12 @@ struct pkg_jobs {
 	struct pkg_job_request	*request_delete;
 	struct pkg_solved *jobs_add;
 	struct pkg_solved *jobs_delete;
+	struct pkg_solved *jobs_upgrade;
 	struct pkg_job_seen *seen;
 	struct pkgdb	*db;
 	pkg_jobs_t	 type;
 	pkg_flags	 flags;
-	bool		 solved;
+	int		 solved;
 	int count;
 	const char *	 reponame;
 	struct job_pattern *patterns;
@@ -438,8 +439,14 @@ int pkg_delete_dirs(struct pkgdb *db, struct pkg *pkg, bool force);
 
 int pkgdb_is_dir_used(struct pkgdb *db, const char *dir, int64_t *res);
 
-int pkgdb_integrity_append(struct pkgdb *db, struct pkg *p);
-int pkgdb_integrity_check(struct pkgdb *db);
+int pkg_conflicts_request_resolve(struct pkg_jobs *j);
+int pkg_conflicts_append_pkg(struct pkg *p, struct pkg_jobs *j);
+int pkg_conflicts_integrity_check(struct pkg_jobs *j);
+
+typedef void (*conflict_func_cb)(const char *, const char *, void *);
+int pkgdb_integrity_append(struct pkgdb *db, struct pkg *p,
+		conflict_func_cb cb, void *cbdata);
+int pkgdb_integrity_check(struct pkgdb *db, conflict_func_cb cb, void *cbdata);
 struct pkgdb_it *pkgdb_integrity_conflict_local(struct pkgdb *db,
 						const char *origin);
 
