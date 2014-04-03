@@ -164,7 +164,7 @@ pkg_manifest_keys_new(struct pkg_manifest_key **key)
 
 static void
 pmk_free(struct pkg_manifest_key *key) {
-	HASH_FREE(key->parser, dataparser, free);
+	HASH_FREE(key->parser, free);
 
 	free(key);
 }
@@ -175,7 +175,7 @@ pkg_manifest_keys_free(struct pkg_manifest_key *key)
 	if (key == NULL)
 		return;
 
-	HASH_FREE(key, pkg_manifest_key, pmk_free);
+	HASH_FREE(key, pmk_free);
 }
 
 static int
@@ -840,12 +840,9 @@ emit_manifest(struct pkg *pkg, struct sbuf **out, short flags)
 	struct pkg_option	*option   = NULL;
 	struct pkg_file		*file     = NULL;
 	struct pkg_dir		*dir      = NULL;
-	struct pkg_category	*category = NULL;
-	struct pkg_license	*license  = NULL;
 	struct pkg_user		*user     = NULL;
 	struct pkg_group	*group    = NULL;
 	struct pkg_shlib	*shlib    = NULL;
-	struct pkg_note		*note     = NULL;
 	struct pkg_conflict	*conflict = NULL;
 	struct pkg_provide	*provide  = NULL;
 	struct sbuf		*tmpsbuf  = NULL;
@@ -892,10 +889,9 @@ emit_manifest(struct pkg *pkg, struct sbuf **out, short flags)
 	}
 
 	pkg_debug(4, "Emitting licenses");
-	seq = NULL;
-	while (pkg_licenses(pkg, &license) == EPKG_OK)
-		seq = ucl_array_append(seq, ucl_object_fromstring(pkg_license_name(license)));
-	obj = ucl_object_insert_key(top, seq, "licenses", 8, false);
+	if (pkg->categories != NULL)
+		obj = ucl_object_insert_key(top,
+		    ucl_object_ref(pkg->categories), "licenses", 8, false);
 
 	obj = ucl_object_insert_key(top, ucl_object_fromint(flatsize), "flatsize", 8, false);
 	if (pkgsize > 0)
@@ -917,10 +913,9 @@ emit_manifest(struct pkg *pkg, struct sbuf **out, short flags)
 	obj = ucl_object_insert_key(top, map, "deps", 4, false);
 
 	pkg_debug(4, "Emitting categories");
-	seq = NULL;
-	while (pkg_categories(pkg, &category) == EPKG_OK)
-		seq = ucl_array_append(seq, ucl_object_fromstring(pkg_category_name(category)));
-	obj = ucl_object_insert_key(top, seq, "categories", 10, false);
+	if (pkg->categories != NULL)
+		obj = ucl_object_insert_key(top,
+		    ucl_object_ref(pkg->categories), "categories", 10, false);
 
 	pkg_debug(4, "Emitting users");
 	seq = NULL;
@@ -974,7 +969,7 @@ emit_manifest(struct pkg *pkg, struct sbuf **out, short flags)
 
 	if (pkg->annotations != NULL)
 		obj = ucl_object_insert_key(top,
-		    ucl_object_ref(map), "annotations", 11, false);
+		    ucl_object_ref(pkg->annotations), "annotations", 11, false);
 
 	if ((flags & PKG_MANIFEST_EMIT_COMPACT) == 0) {
 		if ((flags & PKG_MANIFEST_EMIT_NOFILES) == 0) {

@@ -1,6 +1,7 @@
 /*-
  * Copyright (c) 2011-2014 Baptiste Daroussin <bapt@FreeBSD.org>
  * Copyright (c) 2011-2012 Julien Laffaye <jlaffaye@FreeBSD.org>
+ * Copyright (c) 2014 Matthew Seaman <matthew@FreeBSD.org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -27,6 +28,7 @@
 
 #include <assert.h>
 #include <sys/socket.h>
+#include <sys/utsname.h>
 #include <sys/un.h>
 #include <ctype.h>
 #include <dirent.h>
@@ -34,6 +36,8 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <osreldate.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +54,14 @@
 #endif
 #ifndef DEFAULT_VULNXML_URL
 #define DEFAULT_VULNXML_URL "http://www.vuxml.org/freebsd/vuln.xml.bz2"
+#endif
+
+#ifdef	OSMAJOR
+#define STRINGIFY(X)	TEXT(X)
+#define TEXT(X)		#X
+#define INDEXFILE	"INDEX-" STRINGIFY(OSMAJOR)
+#else
+#define INDEXFILE	INDEX
 #endif
 
 int eventpipe = -1;
@@ -83,6 +95,18 @@ static struct config_entry c[] = {
 		"PORTSDIR",
 		"/usr/ports",
 		"Location of the ports collection",
+	},
+	{
+		PKG_STRING,
+		"INDEXDIR",
+		NULL,		/* Default to PORTSDIR unless defined */
+		"Location of the ports INDEX",
+	},
+	{
+		PKG_STRING,
+		"INDEXFILE",
+		INDEXFILE,
+		"Filename of the ports INDEX",
 	},
 	{
 		PKG_BOOL,
@@ -578,6 +602,29 @@ load_repositories(const char *repodir)
 		load_repo_files(pkg_object_string(cur));
 }
 
+bool
+pkg_compiled_for_same_os_major(void)
+{
+#ifdef OSMAJOR
+	struct utsname	u;
+	int		osmajor;
+
+	/* Are we running the same OS major version as the one we were
+	 * compiled under? */
+
+	if (uname(&u) != 0) {
+		pkg_emit_error("Cannot determine OS version number");
+		return (true);	/* Can't tell, so assume yes  */
+	}
+
+	osmajor = (int) strtol(u.release, NULL, 10);
+
+	return (osmajor == OSMAJOR);
+#else
+	return (true);		/* Can't tell, so assume yes  */
+#endif
+}
+
 
 int
 pkg_init(const char *path, const char *reposdir)
@@ -878,7 +925,7 @@ pkg_shutdown(void)
 	}
 
 	ucl_object_unref(config);
-	HASH_FREE(repos, pkg_repo, pkg_repo_free);
+	HASH_FREE(repos, pkg_repo_free);
 
 	parsed = false;
 

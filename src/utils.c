@@ -39,6 +39,8 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <paths.h>
+#define _WITH_GETLINE
+#include <stdio.h>
 #include <pkg.h>
 
 #include "pkgcli.h"
@@ -85,10 +87,10 @@ cleanup:
 }
 
 bool
-query_yesno(const char *msg, ...)
+query_yesno(bool deft, const char *msg, ...)
 {
 	int	 c;
-	bool	 r = false;
+	bool	 r = deft;
 	va_list	 ap;
 
 	va_start(ap, msg);
@@ -98,13 +100,50 @@ query_yesno(const char *msg, ...)
 	c = getchar();
 	if (c == 'y' || c == 'Y')
 		r = true;
+	else if (c == 'n' || c == 'N')
+		r = false;
 	else if (c == '\n' || c == EOF)
-		return (false);
+		return r;
 
 	while ((c = getchar()) != '\n' && c != EOF)
 		continue;
 
 	return (r);
+}
+
+int
+query_select(const char *msg, const char **opts, int ncnt, int deft)
+{
+	int i;
+	char *str = NULL;
+	char *endpntr = NULL;
+	size_t n = 0;
+
+	printf("%s\n", msg);
+	for (i = 0; i < ncnt; i++) {
+		if (i + 1 == deft)
+		{
+			printf("*[%d] %s\n",
+				i + 1, opts[i]);
+		} else {
+			printf(" [%d] %s\n",
+				i + 1, opts[i]);
+		}
+	}
+
+	getline(&str, &n, stdin);
+	i = (int) strtoul(str, &endpntr, 10);
+
+	if (endpntr == NULL || *endpntr == '\0') {
+		i = deft;
+	} else if (*endpntr == '\n' || *endpntr == '\r') {
+		if (i > ncnt || i < 1)
+			i = deft;
+	} else
+		i = -1;
+
+	free(str);
+	return i;
 }
 
 /* unlike realpath(3), this routine does not expand symbolic links */
@@ -332,7 +371,7 @@ print_info(struct pkg * const pkg, uint64_t options)
 				printf("\n");
 			break;
 		case INFO_CATEGORIES:
-			if (pkg_list_count(pkg, PKG_CATEGORIES) > 0) {
+			if (pkg_object_count(pkg_categories(pkg)) > 0) {
 				if (print_tag)
 					printf("%-15s: ", "Categories");
 				pkg_printf("%C%{%Cn%| %}\n", pkg);
@@ -340,7 +379,7 @@ print_info(struct pkg * const pkg, uint64_t options)
 				printf("\n");
 			break;
 		case INFO_LICENSES:
-			if (pkg_list_count(pkg, PKG_LICENSES) > 0) {
+			if (pkg_object_count(pkg_licenses(pkg)) > 0) {
 				if (print_tag)
 					printf("%-15s: ", "Licenses");
 				pkg_printf("%L%{%Ln%| %l %}\n", pkg);
@@ -393,7 +432,7 @@ print_info(struct pkg * const pkg, uint64_t options)
 			}
 			break;
 		case INFO_ANNOTATIONS:
-			if (pkg_list_count(pkg, PKG_ANNOTATIONS) > 0) {
+			if (pkg_object_count(pkg_annotations(pkg)) > 0) {
 				if (print_tag)
 					printf("%-15s:\n", "Annotations");
 				if (quiet)
@@ -629,7 +668,10 @@ print_jobs_summary_pkg(struct pkg *new_pkg, struct pkg *old_pkg,
 	case PKG_SOLVED_DELETE:
 		*oldsize += flatsize;
 
-		pkg_printf("\tRemoving %n-%v\n", new_pkg, new_pkg);
+		pkg_printf("\tRemoving %n-%v", new_pkg, new_pkg);
+		if (why != NULL)
+			printf(" (%s)", why);
+		printf("\n");
 		break;
 	case PKG_SOLVED_UPGRADE_REMOVE:
 		pkg_printf("\tRemoving old version of %n-%v\n", new_pkg, new_pkg);
@@ -684,31 +726,6 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 		humanize_number(size, sizeof(size), dlsize, "B", HN_AUTOSCALE, 0);
 		printf("\n%s to be downloaded\n", size);
 	}
-}
-
-struct sbuf *
-exec_buf(const char *cmd) {
-	FILE *fp;
-	char buf[BUFSIZ];
-	struct sbuf *res;
-
-	if ((fp = popen(cmd, "r")) == NULL)
-		return (NULL);
-
-	res = sbuf_new_auto();
-	while (fgets(buf, BUFSIZ, fp) != NULL)
-		sbuf_cat(res, buf);
-
-	pclose(fp);
-
-	if (sbuf_len(res) == 0) {
-		sbuf_delete(res);
-		return (NULL);
-	}
-
-	sbuf_finish(res);
-
-	return (res);
 }
 
 int
