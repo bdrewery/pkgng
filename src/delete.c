@@ -53,6 +53,7 @@ exec_delete(int argc, char **argv)
 	match_t match = MATCH_EXACT;
 	int ch;
 	bool force = false;
+	bool recursive_flag = false;
 	bool yes;
 	bool dry_run = false;
 	int retcode = EX_SOFTWARE;
@@ -88,7 +89,7 @@ exec_delete(int argc, char **argv)
 			quiet = true;
 			break;
 		case 'R':
-			f |= PKG_FLAG_RECURSIVE;
+			recursive_flag = true;
 			break;
 		case 'x':
 			match = MATCH_REGEX;
@@ -142,6 +143,15 @@ exec_delete(int argc, char **argv)
 		return (EX_IOERR);
 	}
 
+	/*
+	 * By default delete packages recursively.
+	 * If force mode is enabled then we try to remove packages non-recursively.
+	 * However, if -f and -R flags are both enabled then we return to
+	 * recursive deletion.
+	 */
+	if (!force || recursive_flag)
+		f |= PKG_FLAG_RECURSIVE;
+
 	pkg_jobs_set_flags(jobs, f);
 
 	if (match == MATCH_EXACT) {
@@ -182,7 +192,7 @@ exec_delete(int argc, char **argv)
 			goto cleanup;
 		}
 		if (!yes && !dry_run)
-			yes = query_yesno(
+			yes = query_yesno(false,
 		            "\nProceed with deinstalling packages [y/N]: ");
 	}
 	if (!yes || (retcode = pkg_jobs_apply(jobs)) != EPKG_OK)
