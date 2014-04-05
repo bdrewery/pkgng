@@ -1895,7 +1895,7 @@ pkg_jobs_handle_install(struct pkg_solved *ps, struct pkg_jobs *j, bool handle_r
 			goto cleanup;
 		}
 	}
-	if ((retcode = pkg_add(j->db, target, flags, keys)) != EPKG_OK) {
+	if ((retcode = pkg_add(j->db, target, flags, keys, NULL)) != EPKG_OK) {
 		pkgdb_transaction_rollback(j->db->sqlite, "upgrade");
 		goto cleanup;
 	}
@@ -2117,7 +2117,7 @@ pkg_jobs_apply(struct pkg_jobs *j)
 			p = ps->items[0]->pkg;													\
 			if (p->type != PKG_REMOTE)												\
 				continue;															\
-			if (pkg_repo_fetch(p) != EPKG_OK)										\
+			if (pkg_repo_fetch_package(p) != EPKG_OK)								\
 				return (EPKG_FATAL);												\
 		}																			\
 	}																				\
