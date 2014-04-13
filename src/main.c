@@ -490,7 +490,7 @@ main(int argc, char **argv)
 #ifdef HAVE_LIBJAIL
 	while ((ch = getopt(argc, argv, "dj:c:C:R:lNvqo:")) != -1) {
 #else
-	while ((ch = getopt(argc, argv, "d:c:C:R:lNvqo:")) != -1) {
+	while ((ch = getopt(argc, argv, "dc:C:R:lNvqo:")) != -1) {
 #endif
 		switch (ch) {
 		case 'd':
@@ -547,7 +547,8 @@ main(int argc, char **argv)
 	optreset = 1;
 	optind = 1;
 
-	start_process_worker();
+	if (debug == 0)
+		start_process_worker();
 
 	if (jail_str != NULL && chroot_path != NULL) {
 		usage(conffile, reposdir, stderr, PKG_USAGE_INVALID_ARGUMENTS,
