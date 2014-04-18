@@ -59,7 +59,6 @@ pkg_delete(struct pkg *pkg, struct pkgdb *db, unsigned flags)
 	 */
 	if ((ret = pkgdb_load_rdeps(db, pkg)) != EPKG_OK)
 		return (ret);
-
 	if ((ret = pkgdb_load_files(db, pkg)) != EPKG_OK)
 		return (ret);
 	if ((ret = pkgdb_load_dirs(db, pkg)) != EPKG_OK)
@@ -67,6 +66,8 @@ pkg_delete(struct pkg *pkg, struct pkgdb *db, unsigned flags)
 	if ((ret = pkgdb_load_scripts(db, pkg)) != EPKG_OK)
 		return (ret);
 	if ((ret = pkgdb_load_mtree(db, pkg)) != EPKG_OK)
+		return (ret);
+	if ((ret = pkgdb_load_annotations(db, pkg)) != EPKG_OK)
 		return (ret);
 
 	if ((flags & PKG_DELETE_UPGRADE) == 0)
@@ -139,19 +140,25 @@ pkg_delete_files(struct pkg *pkg, unsigned force)
 	struct pkg_file	*file = NULL;
 	char		 sha256[SHA256_DIGEST_LENGTH * 2 + 1];
 	const char	*path;
+	char		fpath[MAXPATHLEN];
 
 	while (pkg_files(pkg, &file) == EPKG_OK) {
 		const char *sum = pkg_file_cksum(file);
+		const ucl_object_t *obj, *an;
 
 		if (file->keep == 1)
 			continue;
 
 		path = pkg_file_path(file);
+		pkg_get(pkg, PKG_ANNOTATIONS, &an);
+		obj = pkg_object_find(an, "relocated");
+		snprintf(fpath, sizeof(fpath), "%s%s",
+		    obj ? pkg_object_string(obj) : "" , path );
 
 		/* Regular files and links */
 		/* check sha256 */
 		if (!force && sum[0] != '\0') {
-			if (sha256_file(path, sha256) != EPKG_OK)
+			if (sha256_file(fpath, sha256) != EPKG_OK)
 				continue;
 			if (strcmp(sha256, sum)) {
 				pkg_emit_error("%s fails original SHA256 "
@@ -160,9 +167,9 @@ pkg_delete_files(struct pkg *pkg, unsigned force)
 			}
 		}
 
-		if (unlink(path) == -1) {
+		if (unlink(fpath) == -1) {
 			if (force < 2)
-				pkg_emit_errno("unlink", path);
+				pkg_emit_errno("unlink", fpath);
 			continue;
 		}
 	}
@@ -173,19 +180,26 @@ pkg_delete_files(struct pkg *pkg, unsigned force)
 int
 pkg_delete_dirs(__unused struct pkgdb *db, struct pkg *pkg, bool force)
 {
-	struct pkg_dir	*dir = NULL;
+	struct pkg_dir		*dir = NULL;
+	const ucl_object_t 	*obj, *an;
+	char			 fpath[MAXPATHLEN];
 
 	while (pkg_dirs(pkg, &dir) == EPKG_OK) {
 		if (dir->keep == 1)
 			continue;
 
+		pkg_get(pkg, PKG_ANNOTATIONS, &an);
+		obj = pkg_object_find(an, "relocated");
+		snprintf(fpath, sizeof(fpath), "%s%s",
+		    obj ? pkg_object_string(obj) : "" , pkg_dir_path(dir) );
+
 		if (pkg_dir_try(dir)) {
-			if (rmdir(pkg_dir_path(dir)) == -1 &&
+			if (rmdir(fpath) == -1 &&
 			    errno != ENOTEMPTY && errno != EBUSY && !force)
-				pkg_emit_errno("rmdir", pkg_dir_path(dir));
+				pkg_emit_errno("rmdir", fpath);
 		} else {
-			if (rmdir(pkg_dir_path(dir)) == -1 && !force)
-				pkg_emit_errno("rmdir", pkg_dir_path(dir));
+			if (rmdir(fpath) == -1 && !force)
+				pkg_emit_errno("rmdir", fpath);
 		}
 	}
 

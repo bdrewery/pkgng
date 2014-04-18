@@ -41,15 +41,16 @@
 #include <paths.h>
 #define _WITH_GETLINE
 #include <stdio.h>
+#include <errno.h>
 #include <pkg.h>
 
+#include "utlist.h"
 #include "pkgcli.h"
 
 bool
-query_tty_yesno(const char *msg, ...)
+query_tty_yesno(bool r, const char *msg, ...)
 {
 	int	 c;
-	bool	 r = false;
 	va_list	 ap;
 	int	 tty_fd;
 	FILE	*tty;
@@ -255,6 +256,7 @@ print_info(struct pkg * const pkg, uint64_t options)
 	bool show_locks = false;
 	char size[7];
 	const char *repourl;
+	const pkg_object	*o;
 	unsigned opt;
 	int64_t flatsize, oldflatsize, pkgsize;
 	int cout = 0;		/* Number of characters output */
@@ -371,7 +373,8 @@ print_info(struct pkg * const pkg, uint64_t options)
 				printf("\n");
 			break;
 		case INFO_CATEGORIES:
-			if (pkg_object_count(pkg_categories(pkg)) > 0) {
+			pkg_get(pkg, PKG_CATEGORIES, &o);
+			if (pkg_object_count(o) > 0) {
 				if (print_tag)
 					printf("%-15s: ", "Categories");
 				pkg_printf("%C%{%Cn%| %}\n", pkg);
@@ -379,7 +382,8 @@ print_info(struct pkg * const pkg, uint64_t options)
 				printf("\n");
 			break;
 		case INFO_LICENSES:
-			if (pkg_object_count(pkg_licenses(pkg)) > 0) {
+			pkg_get(pkg, PKG_LICENSES, &o);
+			if (pkg_object_count(o) > 0) {
 				if (print_tag)
 					printf("%-15s: ", "Licenses");
 				pkg_printf("%L%{%Ln%| %l %}\n", pkg);
@@ -432,7 +436,8 @@ print_info(struct pkg * const pkg, uint64_t options)
 			}
 			break;
 		case INFO_ANNOTATIONS:
-			if (pkg_object_count(pkg_annotations(pkg)) > 0) {
+			pkg_get(pkg, PKG_ANNOTATIONS, &o);
+			if (pkg_object_count(o) > 0) {
 				if (print_tag)
 					printf("%-15s:\n", "Annotations");
 				if (quiet)
@@ -566,63 +571,61 @@ print_info(struct pkg * const pkg, uint64_t options)
 	}
 }
 
+enum pkg_display_type {
+	PKG_DISPLAY_LOCKED = 0,
+	PKG_DISPLAY_DELETE,
+	PKG_DISPLAY_INSTALL,
+	PKG_DISPLAY_UPGRADE,
+	PKG_DISPLAY_DOWNGRADE,
+	PKG_DISPLAY_REINSTALL,
+	PKG_DISPLAY_FETCH,
+	PKG_DISPLAY_MAX
+};
+struct pkg_solved_display_item {
+	struct pkg *new, *old;
+	enum pkg_display_type display_type;
+	pkg_solved_t solved_type;
+	struct pkg_solved_display_item *prev, *next;
+};
+
 static void
-print_jobs_summary_pkg(struct pkg *new_pkg, struct pkg *old_pkg,
+set_jobs_summary_pkg(struct pkg *new_pkg, struct pkg *old_pkg,
 		pkg_solved_t type, int64_t *oldsize,
-		int64_t *newsize, int64_t *dlsize)
+		int64_t *newsize, int64_t *dlsize,
+		struct pkg_solved_display_item **disp)
 {
-	const char *oldversion, *cachedir, *why;
+	const char *oldversion;
 	char path[MAXPATHLEN];
 	struct stat st;
 	int64_t flatsize, oldflatsize, pkgsize;
-	char size[7];
+	struct pkg_solved_display_item *it;
 
 	flatsize = oldflatsize = pkgsize = 0;
 	oldversion = NULL;
 
-	cachedir = pkg_object_string(pkg_config_get("PKG_CACHEDIR"));
-	pkg_get(new_pkg, PKG_FLATSIZE, &flatsize, PKG_PKGSIZE, &pkgsize, PKG_REASON, &why);
+	pkg_get(new_pkg, PKG_FLATSIZE, &flatsize, PKG_PKGSIZE, &pkgsize);
 	if (old_pkg != NULL)
 		pkg_get(old_pkg, PKG_VERSION, &oldversion, PKG_FLATSIZE, &oldflatsize);
 
+	it = malloc(sizeof (*it));
+	if (it == NULL) {
+		fprintf(stderr, "malloc failed for "
+				"pkg_solved_display_item: %s", strerror (errno));
+		return;
+	}
+	it->new = new_pkg;
+	it->old = old_pkg;
+	it->solved_type = type;
+
 	if (old_pkg != NULL && pkg_is_locked(old_pkg)) {
 		pkg_printf("\tPackage %n-%v is locked ", old_pkg, old_pkg);
-		switch (type) {
-		case PKG_SOLVED_INSTALL:
-		case PKG_SOLVED_UPGRADE:
-			/* If it's a new install, then it
-			 * cannot have been locked yet. */
-			if (oldversion != NULL) {
-				switch(pkg_version_change_between(new_pkg, old_pkg)) {
-				case PKG_UPGRADE:
-					pkg_printf("and may not be upgraded to version %v\n", new_pkg);
-					break;
-				case PKG_REINSTALL:
-					printf("and may not be reinstalled\n");
-					break;
-				case PKG_DOWNGRADE:
-					pkg_printf("and may not be downgraded to version %v\n", new_pkg);
-					break;
-				}
-				return;
-			}
-			break;
-		case PKG_SOLVED_DELETE:
-		case PKG_SOLVED_UPGRADE_REMOVE:
-			printf("and may not be deinstalled\n");
-			return;
-			break;
-		case PKG_SOLVED_FETCH:
-			printf("but a new package can still be fetched\n");
-			break;
-		}
-
+		it->display_type = PKG_DISPLAY_LOCKED;
 	}
 
 	switch (type) {
 	case PKG_SOLVED_INSTALL:
 	case PKG_SOLVED_UPGRADE:
-		pkg_snprintf(path, MAXPATHLEN, "%S/%R", cachedir, new_pkg);
+		pkg_repo_cached_name(new_pkg, path, sizeof(path));
 
 		if (stat(path, &st) == -1 || pkgsize != st.st_size)
 			/* file looks corrupted (wrong size),
@@ -634,64 +637,137 @@ print_jobs_summary_pkg(struct pkg *new_pkg, struct pkg *old_pkg,
 		if (old_pkg != NULL) {
 			switch (pkg_version_change_between(new_pkg, old_pkg)) {
 			case PKG_DOWNGRADE:
-				pkg_printf("\tDowngrading %n: %v -> %v", new_pkg, old_pkg, new_pkg);
-				if (pkg_repos_total_count() > 1)
-					pkg_printf(" [%N]", new_pkg);
-				printf("\n");
+				it->display_type = PKG_DISPLAY_DOWNGRADE;
 				break;
 			case PKG_REINSTALL:
-				pkg_printf("\tReinstalling %n-%v", new_pkg, new_pkg);
-				if (pkg_repos_total_count() > 1)
-					pkg_printf(" [%N]", new_pkg);
-				if (why != NULL)
-					printf(" (%s)", why);
-				printf("\n");
+				it->display_type = PKG_DISPLAY_REINSTALL;
+
 				break;
 			case PKG_UPGRADE:
-				pkg_printf("\tUpgrading %n: %v -> %v", new_pkg, old_pkg, new_pkg);
-				if (pkg_repos_total_count() > 1)
-					pkg_printf(" [%N]", new_pkg);
-				printf("\n");
+				it->display_type = PKG_DISPLAY_UPGRADE;
+
 				break;
 			}
 			*oldsize += oldflatsize;
 			*newsize += flatsize;
 		} else {
+			it->display_type = PKG_DISPLAY_INSTALL;
 			*newsize += flatsize;
-
-			pkg_printf("\tInstalling %n: %v", new_pkg, new_pkg);
-			if (pkg_repos_total_count() > 1)
-				pkg_printf(" [%N]", new_pkg);
-			printf("\n");
 		}
 		break;
 	case PKG_SOLVED_DELETE:
 		*oldsize += flatsize;
+		it->display_type = PKG_DISPLAY_DELETE;
 
-		pkg_printf("\tRemoving %n-%v", new_pkg, new_pkg);
-		if (why != NULL)
-			printf(" (%s)", why);
-		printf("\n");
 		break;
 	case PKG_SOLVED_UPGRADE_REMOVE:
-		pkg_printf("\tRemoving old version of %n-%v\n", new_pkg, new_pkg);
+		/* Ignore split-upgrade packages for display */
+		free(it);
+		return;
 		break;
+
 	case PKG_SOLVED_FETCH:
 		*dlsize += pkgsize;
-		pkg_snprintf(path, MAXPATHLEN, "%S/%R", cachedir, new_pkg);
+		it->display_type = PKG_DISPLAY_FETCH;
+
+		pkg_repo_cached_name(new_pkg, path, sizeof(path));
 		if (stat(path, &st) != -1)
 			*oldsize = st.st_size;
 		else
 			*oldsize = 0;
 		*dlsize -= *oldsize;
 
+		break;
+	}
+	DL_APPEND(disp[it->display_type], it);
+}
+
+static void
+display_summary_item (struct pkg_solved_display_item *it, int64_t total_size)
+{
+	const char *why;
+	int64_t pkgsize;
+	char size[7];
+
+	pkg_get(it->new, PKG_PKGSIZE, &pkgsize);
+
+	switch (it->display_type) {
+	case PKG_DISPLAY_LOCKED:
+		pkg_printf("\tPackage %n-%v is locked ", it->old, it->old);
+		switch (it->solved_type) {
+		case PKG_SOLVED_INSTALL:
+		case PKG_SOLVED_UPGRADE:
+			/* If it's a new install, then it
+			 * cannot have been locked yet. */
+			pkg_printf("and may not be upgraded to version %v\n", it->new);
+			break;
+		case PKG_SOLVED_DELETE:
+		case PKG_SOLVED_UPGRADE_REMOVE:
+			printf("and may not be deinstalled\n");
+			return;
+			break;
+		case PKG_SOLVED_FETCH:
+			printf("but a new package can still be fetched\n");
+			break;
+		}
+		break;
+	case PKG_DISPLAY_DELETE:
+		pkg_get(it->new, PKG_REASON, &why);
+		pkg_printf("\t%n-%v", it->new, it->new);
+		if (why != NULL)
+			printf(" (%s)", why);
+		printf("\n");
+		break;
+	case PKG_DISPLAY_INSTALL:
+		pkg_printf("\t%n: %v", it->new, it->new);
+		if (pkg_repos_total_count() > 1)
+			pkg_printf(" [%N]", it->new);
+		printf("\n");
+		break;
+	case PKG_DISPLAY_UPGRADE:
+		pkg_printf("\t%n: %v -> %v", it->new, it->old, it->new);
+		if (pkg_repos_total_count() > 1)
+			pkg_printf(" [%N]", it->new);
+		printf("\n");
+		break;
+	case PKG_DISPLAY_DOWNGRADE:
+		pkg_printf("\t%n: %v -> %v", it->new, it->old, it->new);
+		if (pkg_repos_total_count() > 1)
+			pkg_printf(" [%N]", it->new);
+		printf("\n");
+		break;
+	case PKG_DISPLAY_REINSTALL:
+		pkg_get(it->new, PKG_REASON, &why);
+		pkg_printf("\t%n-%v", it->new, it->new);
+		if (pkg_repos_total_count() > 1)
+			pkg_printf(" [%N]", it->new);
+		if (why != NULL)
+			printf(" (%s)", why);
+		printf("\n");
+		break;
+	case PKG_DISPLAY_FETCH:
 		humanize_number(size, sizeof(size), pkgsize, "B", HN_AUTOSCALE, 0);
 
-		pkg_printf("\t%n-%v ", new_pkg, new_pkg);
-		printf("(%" PRId64 "%% of %s)\n", 100 - (100 * (*oldsize))/pkgsize, size);
+		pkg_printf("\t%n-%v ", it->new, it->new);
+		printf("(%" PRId64 "%% of %s)\n", 100 - (100 * total_size) / pkgsize,
+				size);
+		break;
+	default:
 		break;
 	}
 }
+
+
+static const char* pkg_display_messages[PKG_DISPLAY_MAX + 1] = {
+	[PKG_DISPLAY_LOCKED] = "Installed packages LOCKED",
+	[PKG_DISPLAY_DELETE] = "Installed packages to be REMOVED",
+	[PKG_DISPLAY_INSTALL] = "New packages to be INSTALLED",
+	[PKG_DISPLAY_UPGRADE] = "Installed packages to be UPGRADED",
+	[PKG_DISPLAY_DOWNGRADE] = "Installed packages to be DOWNGRADED",
+	[PKG_DISPLAY_REINSTALL] = "Installed packages to be REINSTALLED",
+	[PKG_DISPLAY_FETCH] = "New packages to be FETCHED",
+	[PKG_DISPLAY_MAX] = NULL
+};
 
 void
 print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
@@ -702,29 +778,44 @@ print_jobs_summary(struct pkg_jobs *jobs, const char *msg, ...)
 	va_list ap;
 	int type;
 	int64_t dlsize, oldsize, newsize;
+	struct pkg_solved_display_item *disp[PKG_DISPLAY_MAX], *cur, *tmp;
 
 	dlsize = oldsize = newsize = 0;
 	type = pkg_jobs_type(jobs);
+	memset(disp, 0, sizeof (disp));
 
-	va_start(ap, msg);
-	vprintf(msg, ap);
-	va_end(ap);
+	if (msg != NULL) {
+		va_start(ap, msg);
+		vprintf(msg, ap);
+		va_end(ap);
+	}
 
 	while (pkg_jobs_iter(jobs, &iter, &new_pkg, &old_pkg, &type)) {
-		print_jobs_summary_pkg(new_pkg, old_pkg, type, &oldsize, &newsize, &dlsize);
+		set_jobs_summary_pkg(new_pkg, old_pkg, type, &oldsize, &newsize, &dlsize, disp);
+	}
+
+	for (type = 0; type < PKG_DISPLAY_MAX; type ++) {
+		if (disp[type] != NULL) {
+			printf("%s:\n", pkg_display_messages[type]);
+			DL_FOREACH_SAFE(disp[type], cur, tmp) {
+				display_summary_item(cur, dlsize);
+				free(cur);
+			}
+			puts("\n");
+		}
 	}
 
 	if (oldsize > newsize) {
 		humanize_number(size, sizeof(size), oldsize - newsize, "B", HN_AUTOSCALE, 0);
-		printf("\nThe operation will free %s\n", size);
+		printf("The operation will free %s\n", size);
 	} else if (newsize > oldsize) {
 		humanize_number(size, sizeof(size), newsize - oldsize, "B", HN_AUTOSCALE, 0);
-		printf("\nThe process will require %s more space\n", size);
+		printf("The process will require %s more space\n", size);
 	}
 
 	if (dlsize > 0) {
 		humanize_number(size, sizeof(size), dlsize, "B", HN_AUTOSCALE, 0);
-		printf("\n%s to be downloaded\n", size);
+		printf("%s to be downloaded\n", size);
 	}
 }
 

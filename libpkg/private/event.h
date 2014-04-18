@@ -34,6 +34,8 @@ void pkg_emit_notice(const char *fmt, ...);
 void pkg_emit_errno(const char *func, const char *arg);
 void pkg_emit_already_installed(struct pkg *p);
 void pkg_emit_fetching(const char *url, off_t total, off_t done, time_t elapsed);
+void pkg_emit_update_add(int total, int done);
+void pkg_emit_update_remove(int total, int done);
 void pkg_emit_install_begin(struct pkg *p);
 void pkg_emit_install_finished(struct pkg *p);
 void pkg_emit_deinstall_begin(struct pkg *p);
@@ -55,6 +57,7 @@ void pkg_emit_developer_mode(const char *fmt, ...);
 void pkg_emit_package_not_found(const char *);
 void pkg_emit_incremental_update(int updated, int removed, int added, int processed);
 void pkg_debug(int level, const char *fmt, ...);
+int pkg_emit_sandbox_call(pkg_sandbox_cb call, int fd, void *ud);
 
 
 #endif

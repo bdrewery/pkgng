@@ -40,30 +40,7 @@
 #include "private/pkg.h"
 #include "private/utils.h"
 
-static struct _fields {
-	const char *human_desc;
-	int type;
-	int optional;
-} fields[] = {
-	[PKG_ORIGIN] = {"origin", PKG_FILE|PKG_REMOTE|PKG_INSTALLED, 0},
-	[PKG_NAME] = {"name", PKG_FILE|PKG_REMOTE|PKG_INSTALLED, 0},
-	[PKG_VERSION] = {"version", PKG_FILE|PKG_REMOTE|PKG_INSTALLED, 0},
-	[PKG_COMMENT] = {"comment", PKG_FILE|PKG_REMOTE|PKG_INSTALLED, 0},
-	[PKG_DESC] = {"description", PKG_FILE|PKG_REMOTE|PKG_INSTALLED, 0},
-	[PKG_MTREE] = {"mtree", PKG_FILE|PKG_INSTALLED, 1},
-	[PKG_MESSAGE] = {"message", PKG_FILE|PKG_INSTALLED, 1},
-	[PKG_ARCH] = {"architecture", PKG_FILE|PKG_REMOTE|PKG_INSTALLED, 0},
-	[PKG_MAINTAINER] = {"maintainer", PKG_FILE|PKG_REMOTE|PKG_INSTALLED, 0},
-	[PKG_WWW] = {"www", PKG_FILE|PKG_REMOTE|PKG_INSTALLED, 0},
-	[PKG_PREFIX] = {"prefix", PKG_FILE|PKG_REMOTE|PKG_INSTALLED, 0},
-	[PKG_REPOPATH] = {"repopath", PKG_REMOTE, 0},
-	[PKG_CKSUM] = {"checksum", PKG_REMOTE, 0},
-	[PKG_OLD_VERSION] = {"oldversion", PKG_REMOTE, 1},
-	[PKG_REPONAME] = {"reponame", PKG_REMOTE, 1},
-	[PKG_REPOURL] = {"repourl", PKG_REMOTE, 1},
-	[PKG_DIGEST] = {"manifestdigest", PKG_REMOTE|PKG_INSTALLED, 1},
-	[PKG_REASON] = {"reason", PKG_REMOTE, 1}
-};
+static ucl_object_t *manifest_schema = NULL;
 
 int
 pkg_new(struct pkg **pkg, pkg_t type)
@@ -73,11 +50,8 @@ pkg_new(struct pkg **pkg, pkg_t type)
 		return EPKG_FATAL;
 	}
 
-	(*pkg)->automatic = false;
-	(*pkg)->locked = false;
-	(*pkg)->direct = false;
+	(*pkg)->fields = ucl_object_typed_new(UCL_OBJECT);
 	(*pkg)->type = type;
-	(*pkg)->licenselogic = LICENSE_SINGLE;
 
 	return (EPKG_OK);
 }
@@ -90,23 +64,14 @@ pkg_reset(struct pkg *pkg, pkg_t type)
 	if (pkg == NULL)
 		return;
 
-	for (i = 0; i < PKG_NUM_FIELDS; i++)
-		sbuf_reset(pkg->fields[i]);
+	ucl_object_unref(pkg->fields);
+	pkg->fields = ucl_object_typed_new(UCL_OBJECT);
+	pkg->flags &= ~PKG_LOAD_CATEGORIES;
+	pkg->flags &= ~PKG_LOAD_LICENSES;
+	pkg->flags &= ~PKG_LOAD_ANNOTATIONS;
 
 	for (i = 0; i < PKG_NUM_SCRIPTS; i++)
 		sbuf_reset(pkg->scripts[i]);
-
-	pkg->flatsize = 0;
-	pkg->old_flatsize = 0;
-	pkg->pkgsize = 0;
-	pkg->time = 0;
-	pkg->flags = 0;
-	pkg->automatic = false;
-	pkg->locked = false;
-	pkg->licenselogic = LICENSE_SINGLE;
-
-	pkg_list_free(pkg, PKG_LICENSES);
-	pkg_list_free(pkg, PKG_CATEGORIES);
 	pkg_list_free(pkg, PKG_DEPS);
 	pkg_list_free(pkg, PKG_RDEPS);
 	pkg_list_free(pkg, PKG_FILES);
@@ -116,9 +81,7 @@ pkg_reset(struct pkg *pkg, pkg_t type)
 	pkg_list_free(pkg, PKG_GROUPS);
 	pkg_list_free(pkg, PKG_SHLIBS_REQUIRED);
 	pkg_list_free(pkg, PKG_SHLIBS_PROVIDED);
-	pkg_list_free(pkg, PKG_ANNOTATIONS);
 
-	pkg->rowid = 0;
 	pkg->type = type;
 }
 
@@ -128,14 +91,11 @@ pkg_free(struct pkg *pkg)
 	if (pkg == NULL)
 		return;
 
-	for (int i = 0; i < PKG_NUM_FIELDS; i++)
-		sbuf_free(pkg->fields[i]);
+	ucl_object_unref(pkg->fields);
 
 	for (int i = 0; i < PKG_NUM_SCRIPTS; i++)
 		sbuf_free(pkg->scripts[i]);
 
-	pkg_list_free(pkg, PKG_LICENSES);
-	pkg_list_free(pkg, PKG_CATEGORIES);
 	pkg_list_free(pkg, PKG_DEPS);
 	pkg_list_free(pkg, PKG_RDEPS);
 	pkg_list_free(pkg, PKG_FILES);
@@ -145,7 +105,6 @@ pkg_free(struct pkg *pkg)
 	pkg_list_free(pkg, PKG_GROUPS);
 	pkg_list_free(pkg, PKG_SHLIBS_REQUIRED);
 	pkg_list_free(pkg, PKG_SHLIBS_PROVIDED);
-	pkg_list_free(pkg, PKG_ANNOTATIONS);
 
 	free(pkg);
 }
@@ -158,25 +117,92 @@ pkg_type(const struct pkg * restrict pkg)
 	return (pkg->type);
 }
 
+static ucl_object_t *
+manifest_schema_open(pkg_t type __unused)
+{
+	struct ucl_parser *parser;
+	static const char manifest_schema_str[] = ""
+		"{"
+		"  type = object;"
+		"  properties {"
+		"    origin = { type = string };"
+		"    name = { type = string };"
+		"    comment = { type = string };"
+		"    desc = { type = string };"
+		"    mtree = { type = string };"
+		"    message = { type = string };"
+		"    maintainer = { type = string };"
+		"    arch = { type = string };"
+		"    www = { type = string };"
+		"    prefix = { type = string };"
+		"    digest = { type = string };"
+		"    repopath = { type = string };"
+		"    sum = { type = string };"
+		"    oldversion = { type = string };"
+		"    reponame = { type = string };"
+		"    repourl = { type = string };"
+		"    reason = { type = string };"
+		"    flatsize = { type = integer }; "
+		"    oldflatsize = { type = integer }; "
+		"    pkgsize = { type = integer }; "
+		"    locked = { type = boolean }; "
+		"    rowid = { type = integer }; "
+		"    time = { type = integer }; "
+		"    annotations = { type = object }; "
+		"    licenses = { "
+		"      type = array; "
+		"      items = { type = string }; "
+		"      uniqueItems = true ;"
+		"    };"
+		"    categories = { "
+		"      type = array; "
+		"      items = { type = string }; "
+		"      uniqueItems = true ;"
+		"    };"
+		"  }\n"
+		"  required = ["
+		"    origin,"
+		"    name,"
+		"    comment,"
+		"    desc,"
+		"    maintainer,"
+		"    arch,"
+		"    www,"
+		"    prefix,"
+		"  ]"
+		"}";
+
+	if (manifest_schema != NULL)
+		return (manifest_schema);
+
+	parser = ucl_parser_new(0);
+	if (!ucl_parser_add_chunk(parser, manifest_schema_str,
+	    sizeof(manifest_schema_str) -1)) {
+		pkg_emit_error("Cannot parse manifest schema: %s",
+		    ucl_parser_get_error(parser));
+		ucl_parser_free(parser);
+		return (NULL);
+	}
+
+	manifest_schema = ucl_parser_get_object(parser);
+	ucl_parser_free(parser);
+
+	return (manifest_schema);
+}
+
 int
 pkg_is_valid(const struct pkg * restrict pkg)
 {
-	int i;
+	ucl_object_t *schema;
+	struct ucl_schema_error err;
 
-	if (pkg->type == 0) {
-		pkg_emit_error("package type undefined");
+	schema = manifest_schema_open(pkg->type);
+
+	if (schema == NULL)
 		return (EPKG_FATAL);
-	}
 
-	/* Ensure that required fields are set. */
-	for (i = 0; i < PKG_NUM_FIELDS; i++) {
-		if ((fields[i].type & pkg->type) == 0 ||
-		    fields[i].optional ||
-		    (pkg->fields[i] != NULL &&
-		    sbuf_len(pkg->fields[i]) > 0))
-			continue;
-		pkg_emit_error("package field incomplete: %s",
-		    fields[i].human_desc);
+	if (!ucl_object_validate(schema, pkg->fields, &err)) {
+		pkg_emit_error("Invalid package: %s", err.msg);
 		return (EPKG_FATAL);
 	}
 
@@ -187,38 +213,41 @@ static int
 pkg_vget(const struct pkg * restrict pkg, va_list ap)
 {
 	int attr;
+	const ucl_object_t *obj;
 
 	while ((attr = va_arg(ap, int)) > 0) {
-		if (attr < PKG_NUM_FIELDS) {
-			const char **var = va_arg(ap, const char **);
-			*var = (pkg->fields[attr] != NULL) ?
-			    sbuf_get(pkg->fields[attr]) : NULL;
-			continue;
+
+		if (attr >= PKG_NUM_FIELDS || attr <= 0) {
+			pkg_emit_error("Bad argument on pkg_get");
+			return (EPKG_FATAL);
 		}
-		switch (attr) {
-		case PKG_FLATSIZE:
-			*va_arg(ap, int64_t *) = pkg->flatsize;
+
+		obj = ucl_object_find_key(pkg->fields, pkg_keys[attr].name);
+		switch (pkg_keys[attr].type) {
+		case UCL_STRING:
+			if (obj == NULL) {
+				*va_arg(ap, const char **) = NULL;
+				break;
+			}
+			*va_arg(ap, const char **) = ucl_object_tostring_forced(obj);
 			break;
-		case PKG_OLD_FLATSIZE:
-			*va_arg(ap, int64_t *) = pkg->old_flatsize;
+		case UCL_BOOLEAN:
+			if (obj == NULL) {
+				*va_arg(ap, bool *) = false;
+				break;
+			}
+			*va_arg(ap, bool *) = ucl_object_toboolean(obj);
 			break;
-		case PKG_PKGSIZE:
-			*va_arg(ap, int64_t *) = pkg->pkgsize;
+		case UCL_INT:
+			if (obj == NULL) {
+				*va_arg(ap, int64_t *) = 0;
+				break;
+			}
+			*va_arg(ap, int64_t *) = ucl_object_toint(obj);
 			break;
-		case PKG_LICENSE_LOGIC:
-			*va_arg(ap, lic_t *) = pkg->licenselogic;
-			break;
-		case PKG_AUTOMATIC:
-			*va_arg(ap, bool *) = pkg->automatic;
-			break;
-		case PKG_LOCKED:
-			*va_arg(ap, bool *) = pkg->locked;
-			break;
-		case PKG_TIME:
-			*va_arg(ap, int64_t *) = pkg->time;
-			break;
-		case PKG_ROWID:
-			*va_arg(ap, int64_t *) = pkg->rowid;
+		case UCL_OBJECT:
+		case UCL_ARRAY:
+			*va_arg(ap, const pkg_object **) = obj;
 			break;
 		default:
 			va_arg(ap, void *); /* ignore */
@@ -244,73 +273,70 @@ pkg_get2(const struct pkg * restrict pkg, ...)
 	return (ret);
 }
 
-static void
-pkg_set_repourl(struct pkg *pkg, const char *str)
-{
-	struct pkg_repo *r;
-
-	r = pkg_repo_find_ident(str);
-	if (r != NULL)
-		pkg_set(pkg, PKG_REPOURL, pkg_repo_url(r));
-}
-
 static int
 pkg_vset(struct pkg *pkg, va_list ap)
 {
 	int attr;
+	struct pkg_repo *r;
+	char *buf = NULL;
+	const char *data;
+	const char *str;
+	ucl_object_t *o;
 
 	while ((attr = va_arg(ap, int)) > 0) {
-		if (attr < PKG_NUM_FIELDS) {
-			struct sbuf **sbuf;
-			const char *str = va_arg(ap, const char *);
+		if (attr >= PKG_NUM_FIELDS || attr <= 0) {
+			pkg_emit_error("Bad argument on pkg_get");
+			return (EPKG_FATAL);
+		}
 
-			if (str == NULL) {
-				pkg->fields[attr] = NULL;
-				continue;
-			}
-
-			sbuf = &pkg->fields[attr];
+		switch (pkg_keys[attr].type) {
+		case UCL_STRING:
+			str = va_arg(ap, const char *);
+			data = str;
 
 			if (attr == PKG_MTREE && !STARTS_WITH(str, "#mtree")) {
-				sbuf_set(sbuf, "#mtree\n");
-				sbuf_cat(*sbuf, str);
-				sbuf_finish(*sbuf);
-				continue;
+				asprintf(&buf, "#mtree\n%s", str);
+				data = buf;
 			}
 
-			if (attr == PKG_REPOURL)
-				pkg_set_repourl(pkg, str);
+			if (attr == PKG_REPOURL) {
+				r = pkg_repo_find_ident(str);
+				if (r == NULL)
+					break;
+				data = pkg_repo_url(r);
+			}
 
-			sbuf_set(sbuf, str);
-			continue;
-		}
-		switch (attr) {
-		case PKG_AUTOMATIC:
-			pkg->automatic = (int)va_arg(ap, int64_t);
+			if (!ucl_object_replace_key(pkg->fields,
+			    ucl_object_fromstring_common(data, strlen(data), 0),
+			    pkg_keys[attr].name, strlen(pkg_keys[attr].name), false)) {
+				if (buf != NULL)
+					free(buf);
+				return (EPKG_FATAL);
+			}
+
+			if (buf != NULL)
+				free(buf);
+
 			break;
-		case PKG_LOCKED:
-			pkg->locked = (bool)va_arg(ap, int64_t);
+		case UCL_BOOLEAN:
+			if (!ucl_object_replace_key(pkg->fields,
+			    ucl_object_frombool((bool)va_arg(ap, int64_t)),
+			    pkg_keys[attr].name, strlen(pkg_keys[attr].name), false))
+				return (EPKG_FATAL);
 			break;
-		case PKG_LICENSE_LOGIC:
-			pkg->licenselogic = (lic_t)va_arg(ap, int64_t);
+		case UCL_INT:
+			if (!ucl_object_replace_key(pkg->fields,
+			    ucl_object_fromint(va_arg(ap, int64_t)),
+			    pkg_keys[attr].name, strlen(pkg_keys[attr].name), false))
+				return (EPKG_FATAL);
 			break;
-		case PKG_FLATSIZE:
-			pkg->flatsize = va_arg(ap, int64_t);
-			break;
-		case PKG_OLD_FLATSIZE:
-			pkg->old_flatsize = va_arg(ap, int64_t);
-			break;
-		case PKG_PKGSIZE:
-			pkg->pkgsize = va_arg(ap, int64_t);
-			break;
-		case PKG_TIME:
-			pkg->time = va_arg(ap, int64_t);
-			break;
-		case PKG_ROWID:
-			pkg->rowid = va_arg(ap, int64_t);
-			break;
+		case UCL_OBJECT:
+		case UCL_ARRAY:
+			o = va_arg(ap, ucl_object_t *);
+			if (!ucl_object_replace_key(pkg->fields, o,
+			    pkg_keys[attr].name, strlen(pkg_keys[attr].name), false))
+					return (EPKG_FATAL);
 		default:
-			/* XXX emit an error? */
 			(void) va_arg(ap, void *);
 			break;
 		}
@@ -467,21 +493,16 @@ pkg_provides(const struct pkg *pkg, struct pkg_provide **c)
 int
 pkg_addlicense(struct pkg *pkg, const char *name)
 {
-	pkg_object *o = NULL;
+	const pkg_object *o, *licenses;
+	pkg_object *l, *lic;
 	pkg_iter iter = NULL;
 
 	assert(pkg != NULL);
 	assert(name != NULL && name[0] != '\0');
-	const char *pkgname;
 
-	if (pkg->licenselogic == LICENSE_SINGLE && UCL_COUNT(pkg->licenses) != 0) {
-		pkg_get(pkg, PKG_NAME, &pkgname);
-		pkg_emit_error("%s have a single license which is already set",
-		    pkgname);
-		return (EPKG_FATAL);
-	}
+	pkg_get(pkg, PKG_LICENSES, &licenses);
 
-	while ((o = pkg_object_iterate(pkg->licenses, &iter))) {
+	while ((o = pkg_object_iterate(licenses, &iter))) {
 		if (strcmp(pkg_object_string(o), name) == 0) {
 			if (pkg_object_bool(pkg_config_get("DEVELOPER_MODE"))) {
 				pkg_emit_error("duplicate license listing: %s, fatal (developer mode)", name);
@@ -493,8 +514,13 @@ pkg_addlicense(struct pkg *pkg, const char *name)
 		}
 	}
 
-	o = ucl_object_fromstring_common(name, strlen(name), 0);
-	pkg->licenses = ucl_array_append(pkg->licenses, o);
+	pkg_get(pkg, PKG_LICENSES, &lic);
+	l = ucl_object_fromstring_common(name, strlen(name), 0);
+	if (lic == NULL) {
+		lic = ucl_object_typed_new(UCL_ARRAY);
+		pkg_set(pkg, PKG_LICENSES, lic);
+	}
+	ucl_array_append(lic, l);
 
 	return (EPKG_OK);
 }
@@ -691,13 +717,15 @@ pkg_addfile_attr(struct pkg *pkg, const char *path, const char *sha256, const ch
 int
 pkg_addcategory(struct pkg *pkg, const char *name)
 {
-	pkg_object *o = NULL;
+	const pkg_object *o, *categories;
+	pkg_object *c, *cat;
 	pkg_iter iter = NULL;
 
 	assert(pkg != NULL);
 	assert(name != NULL && name[0] != '\0');
 
-	while ((o = (pkg_object_iterate(pkg->categories, &iter)))) {
+	pkg_get(pkg, PKG_CATEGORIES, &categories);
+	while ((o = (pkg_object_iterate(categories, &iter)))) {
 		if (strcmp(pkg_object_string(o), name) == 0) {
 			if (pkg_object_bool(pkg_config_get("DEVELOPER_MODE"))) {
 				pkg_emit_error("duplicate category listing: %s, fatal (developer mode)", name);
@@ -709,8 +737,13 @@ pkg_addcategory(struct pkg *pkg, const char *name)
 		}
 	}
 
-	o = ucl_object_fromstring_common(name, strlen(name), 0);
-	pkg->categories = ucl_array_append(pkg->categories, o);
+	pkg_get(pkg, PKG_CATEGORIES, &cat);
+	c = ucl_object_fromstring_common(name, strlen(name), 0);
+	if (cat == NULL) {
+		cat = ucl_object_typed_new(UCL_ARRAY);
+		pkg_set(pkg, PKG_CATEGORIES, cat);
+	}
+	ucl_array_append(cat, c);
 
 	return (EPKG_OK);
 }
@@ -1065,7 +1098,8 @@ pkg_addprovide(struct pkg *pkg, const char *name)
 int
 pkg_addannotation(struct pkg *pkg, const char *tag, const char *value)
 {
-	ucl_object_t *an;
+	const ucl_object_t *an, *notes;
+	ucl_object_t *o, *annotations;
 
 	assert(pkg != NULL);
 	assert(tag != NULL);
@@ -1073,7 +1107,8 @@ pkg_addannotation(struct pkg *pkg, const char *tag, const char *value)
 
 	/* Tags are unique per-package */
 
-	an = ucl_object_find_key(pkg->annotations, tag);
+	pkg_get(pkg, PKG_ANNOTATIONS, &notes);
+	an = pkg_object_find(notes, tag);
 	if (an != NULL) {
 		if (pkg_object_bool(pkg_config_get("DEVELOPER_MODE"))) {
 			pkg_emit_error("duplicate annotation tag: %s value: %s,"
@@ -1085,55 +1120,27 @@ pkg_addannotation(struct pkg *pkg, const char *tag, const char *value)
 			return (EPKG_OK);
 		}
 	}
-	an = ucl_object_fromstring_common(value, strlen(value), 0);
-	pkg->annotations = ucl_object_insert_key(pkg->annotations,
-	    an, tag, strlen(tag), true);
+	o = ucl_object_fromstring_common(value, strlen(value), 0);
+	pkg_get(pkg, PKG_ANNOTATIONS, &annotations);
+	if (annotations == NULL) {
+		annotations = ucl_object_typed_new(UCL_OBJECT);
+		pkg_set(pkg, PKG_ANNOTATIONS, annotations);
+	}
+	ucl_object_insert_key(annotations, o, tag, strlen(tag), true);
 
 	return (EPKG_OK);
-}
-
-pkg_object *
-pkg_licenses(const struct pkg *pkg)
-{
-	assert (pkg != NULL);
-
-	return (pkg->licenses);
-}
-
-pkg_object *
-pkg_categories(const struct pkg *pkg)
-{
-	assert (pkg != NULL);
-
-	return (pkg->categories);
-}
-
-pkg_object *
-pkg_annotations(const struct pkg *pkg)
-{
-	assert(pkg != NULL);
-
-	return (pkg->annotations);
-}
-
-pkg_object *
-pkg_annotation_lookup(const struct pkg *pkg, const char *tag)
-{
-	assert(pkg != NULL);
-	assert(tag != NULL);
-
-	return (ucl_object_find_key(pkg->annotations, tag));
 }
 
 int
 pkg_delannotation(struct pkg *pkg, const char *tag)
 {
-	ucl_object_t *an;
+	ucl_object_t *an, *notes;
 
 	assert(pkg != NULL);
 	assert(tag != NULL);
 
-	an = ucl_object_pop_key(pkg->annotations, tag);
+	pkg_get(pkg, PKG_ANNOTATIONS, &notes);
+	an = ucl_object_pop_keyl(notes, tag, strlen(tag));
 	if (an != NULL) {
 		ucl_object_unref(an);
 		return (EPKG_OK);
@@ -1152,12 +1159,8 @@ pkg_list_count(const struct pkg *pkg, pkg_list list)
 		return (HASH_COUNT(pkg->deps));
 	case PKG_RDEPS:
 		return (HASH_COUNT(pkg->rdeps));
-	case PKG_LICENSES:
-		return (UCL_COUNT(pkg->licenses));
 	case PKG_OPTIONS:
 		return (HASH_COUNT(pkg->options));
-	case PKG_CATEGORIES:
-		return (UCL_COUNT(pkg->categories));
 	case PKG_FILES:
 		return (HASH_COUNT(pkg->files));
 	case PKG_DIRS:
@@ -1170,8 +1173,6 @@ pkg_list_count(const struct pkg *pkg, pkg_list list)
 		return (HASH_COUNT(pkg->shlibs_required));
 	case PKG_SHLIBS_PROVIDED:
 		return (HASH_COUNT(pkg->shlibs_provided));
-	case PKG_ANNOTATIONS:
-		return (UCL_COUNT(pkg->annotations));
 	case PKG_CONFLICTS:
 		return (HASH_COUNT(pkg->conflicts));
 	case PKG_PROVIDES:
@@ -1192,23 +1193,9 @@ pkg_list_free(struct pkg *pkg, pkg_list list)  {
 		HASH_FREE(pkg->rdeps, pkg_dep_free);
 		pkg->flags &= ~PKG_LOAD_RDEPS;
 		break;
-	case PKG_LICENSES:
-		if (pkg->licenses != NULL) {
-			ucl_object_unref(pkg->licenses);
-			pkg->licenses = NULL;
-		}
-		pkg->flags &= ~PKG_LOAD_LICENSES;
-		break;
 	case PKG_OPTIONS:
 		HASH_FREE(pkg->options, pkg_option_free);
 		pkg->flags &= ~PKG_LOAD_OPTIONS;
-		break;
-	case PKG_CATEGORIES:
-		if (pkg->categories != NULL) {
-			ucl_object_unref(pkg->categories);
-			pkg->categories = NULL;
-		}
-		pkg->flags &= ~PKG_LOAD_CATEGORIES;
 		break;
 	case PKG_FILES:
 		HASH_FREE(pkg->files, pkg_file_free);
@@ -1233,13 +1220,6 @@ pkg_list_free(struct pkg *pkg, pkg_list list)  {
 	case PKG_SHLIBS_PROVIDED:
 		HASH_FREE(pkg->shlibs_provided, pkg_shlib_free);
 		pkg->flags &= ~PKG_LOAD_SHLIBS_PROVIDED;
-		break;
-	case PKG_ANNOTATIONS:
-		if (pkg->annotations != NULL) {
-			ucl_object_unref(pkg->annotations);
-			pkg->annotations = NULL;
-		}
-		pkg->flags &= ~PKG_LOAD_ANNOTATIONS;
 		break;
 	case PKG_CONFLICTS:
 		HASH_FREE(pkg->conflicts, pkg_conflict_free);
@@ -1292,17 +1272,17 @@ int
 pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae,
     const char *path, struct pkg_manifest_key *keys, int flags, int fd)
 {
-	struct pkg	 *pkg;
-	pkg_error_t	  retcode = EPKG_OK;
-	int		  ret;
-	const char	 *fpath;
-	bool		  manifest = false;
-	const void	 *buf;
-	size_t		  size;
-	off_t		  offset = 0;
-	struct sbuf	**sbuf;
-	int		  i, r;
-	bool		  read_from_stdin = 0;
+	struct pkg	*pkg;
+	pkg_error_t	 retcode = EPKG_OK;
+	int		 ret;
+	const char	*fpath;
+	bool		 manifest = false;
+	const void	*buf;
+	size_t		 size;
+	off_t		 offset = 0;
+	struct sbuf	*sbuf;
+	int		 i, r;
+	bool		 read_from_stdin = 0;
 
 	struct {
 		const char *name;
@@ -1392,13 +1372,12 @@ pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae,
 
 		for (i = 0; files[i].name != NULL; i++) {
 			if (strcmp(fpath, files[i].name) == 0) {
-				sbuf = &pkg->fields[files[i].attr];
-				sbuf_init(sbuf);
+				sbuf = sbuf_new_auto();
 				offset = 0;
 				for (;;) {
 					if ((r = archive_read_data_block(*a, &buf,
 							&size, &offset)) == 0) {
-						sbuf_bcat(*sbuf, buf, size);
+						sbuf_bcat(sbuf, buf, size);
 					}
 					else {
 						if (r == ARCHIVE_FATAL) {
@@ -1412,7 +1391,9 @@ pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae,
 							break;
 					}
 				}
-				sbuf_finish(*sbuf);
+				sbuf_finish(sbuf);
+				pkg_set(pkg, PKG_MTREE, sbuf_data(sbuf));
+				sbuf_delete(sbuf);
 			}
 		}
 	}
@@ -1454,7 +1435,7 @@ pkg_copy_tree(struct pkg *pkg, const char *src, const char *dest)
 	char dpath[MAXPATHLEN];
 	const char *prefix;
 	char *mtree;
-	pkg_object *o;
+	const pkg_object *o;
 
 	o = pkg_config_get("DISABLE_MTREE");
 	if (o && !pkg_object_bool(o)) {
@@ -1606,9 +1587,13 @@ pkg_has_message(struct pkg *p)
 bool
 pkg_is_locked(const struct pkg * restrict p)
 {
+	bool ret;
+
 	assert(p != NULL);
 
-	return (p->locked);
+	pkg_get(p, PKG_LOCKED, &ret);
+
+	return (ret);
 }
 
 bool
