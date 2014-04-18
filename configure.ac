@@ -2,7 +2,7 @@ m4_define([maj_ver], [1])
 m4_define([med_ver], [3])
 m4_define([min_ver], [0])
 m4_define([api_ver], [m4_eval(maj_ver * 1000000 + med_ver * 1000 + min_ver)])
-m4_define([pkg_version], [maj_ver.med_ver.min_ver.a7])
+m4_define([pkg_version], [maj_ver.med_ver.min_ver.a9])
 
 AC_INIT([pkg],[pkg_version],[https://github.com/freebsd/pkg],[pkg])
 AC_CONFIG_SRCDIR([configure.ac])
@@ -29,6 +29,29 @@ else
     FILEMAP=readfilemap
 fi
 AC_SUBST(FILEMAP)
+
+AC_MSG_CHECKING(for GCC atomic builtins)
+AC_LINK_IFELSE([
+	AC_LANG_SOURCE([[
+		int main() {
+			volatile unsigned long val = 1;
+			__sync_synchronize();
+			__sync_val_compare_and_swap(&val, 1, 0);
+			__sync_add_and_fetch(&val, 1);
+			__sync_sub_and_fetch(&val, 1);
+			return 0;
+		}
+	]])
+],
+[
+ 	AC_MSG_RESULT([yes])
+	AC_DEFINE([HAVE_ATOMIC_BUILTINS], [1], [Has gcc/MSVC atomic intrinsics])
+],
+[
+ 	AC_MSG_RESULT([no])
+	AC_DEFINE([HAVE_ATOMIC_BUILTINS], [0], [Has gcc/MSVC atomic intrinsics])
+])
+
 AC_CHECK_HEADERS_ONCE([machine/endian.h])
 AC_CHECK_HEADERS_ONCE([endian.h])
 AC_CHECK_HEADERS_ONCE([fcntl.h])
@@ -68,7 +91,6 @@ AC_CHECK_HEADER([regex.h], [
 	],
 	[AC_MSG_ERROR([unable to find the regex.h header])],
 	[#include <sys/types.h>])
-
 
 AC_CHECK_FUNCS_ONCE([posix_fallocate])
 AC_CHECK_FUNCS_ONCE([usleep])

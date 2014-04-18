@@ -217,6 +217,8 @@ pkg_repo_update_incremental(const char *name, struct pkg_repo *repo, time_t *mti
 	ssize_t linelen;
 	char *map = MAP_FAILED;
 	size_t len = 0;
+	int hash_it = 0;
+	time_t now, last;
 
 	pkg_debug(1, "Pkgrepo, begin incremental update of '%s'", name);
 	if ((rc = pkgdb_repo_open(name, false, &sqlite)) != EPKG_OK) {
@@ -241,16 +243,18 @@ pkg_repo_update_incremental(const char *name, struct pkg_repo *repo, time_t *mti
 		pkg_repo_update_increment_item_new(&ldel, origin, digest, 4, 0);
 	}
 
+	if (pkg_repo_fetch_meta(repo, NULL) == EPKG_FATAL)
+		pkg_emit_notice("repository %s has no meta file, use default settings",
+				repo->name);
+
 	fdigests = pkg_repo_fetch_remote_extract_tmp(repo,
-			repo_digests_archive, "txz", &local_t,
-			&rc, repo_digests_file);
+			repo->meta->digests, &local_t, &rc);
 	if (fdigests == NULL)
 		goto cleanup;
 	digest_t = local_t;
 	local_t = *mtime;
 	fmanifest = pkg_repo_fetch_remote_extract_tmp(repo,
-			repo_packagesite_archive, "txz", &local_t,
-			&rc, repo_packagesite_file);
+			repo->meta->manifests, &local_t, &rc);
 	if (fmanifest == NULL)
 		goto cleanup;
 	packagesite_t = digest_t;
@@ -328,7 +332,14 @@ pkg_repo_update_incremental(const char *name, struct pkg_repo *repo, time_t *mti
 
 	pkg_debug(1, "Pkgrepo, removing old entries for '%s'", name);
 	removed = HASH_COUNT(ldel);
+	hash_it = 0;
+	last = 0;
 	HASH_ITER(hh, ldel, item, tmp_item) {
+		now = time(NULL);
+		if (++hash_it == removed || now > last) {
+			pkg_emit_update_remove(removed, hash_it);
+			last = now;
+		}
 		if (rc == EPKG_OK) {
 			rc = pkgdb_repo_remove_package(item->origin);
 		}
@@ -352,7 +363,14 @@ pkg_repo_update_incremental(const char *name, struct pkg_repo *repo, time_t *mti
 		return (EPKG_FATAL);
 	}
 
+	hash_it = 0;
+	last = 0;
 	HASH_ITER(hh, ladd, item, tmp_item) {
+		now = time(NULL);
+		if (++hash_it == added || now > last) {
+			pkg_emit_update_add(added, hash_it);
+			last = now;
+		}
 		if (rc == EPKG_OK) {
 			if (item->length != 0) {
 				rc = pkg_repo_add_from_manifest(map + item->offset, item->origin,
@@ -396,7 +414,7 @@ cleanup:
 int
 pkg_repo_update_binary_pkgs(struct pkg_repo *repo, bool force)
 {
-	char repofile[MAXPATHLEN];
+	char filepath[MAXPATHLEN];
 
 	const char *dbdir = NULL;
 	struct stat st;
@@ -404,6 +422,7 @@ pkg_repo_update_binary_pkgs(struct pkg_repo *repo, bool force)
 	sqlite3 *sqlite = NULL;
 	char *req = NULL;
 	int64_t res;
+	bool got_meta = false;
 
 	sqlite3_initialize();
 
@@ -412,13 +431,21 @@ pkg_repo_update_binary_pkgs(struct pkg_repo *repo, bool force)
 
 	dbdir = pkg_object_string(pkg_config_get("PKG_DBDIR"));
 	pkg_debug(1, "PkgRepo: verifying update for %s", pkg_repo_name(repo));
-	snprintf(repofile, sizeof(repofile), "%s/%s.sqlite", dbdir, pkg_repo_name(repo));
 
-	if (stat(repofile, &st) != -1)
+	snprintf(filepath, sizeof(filepath), "%s/%s.meta", dbdir, pkg_repo_name(repo));
+	if (stat(filepath, &st) != -1) {
 		t = force ? 0 : st.st_mtime;
+		got_meta = true;
+	}
+
+	snprintf(filepath, sizeof(filepath), "%s/%s.sqlite", dbdir, pkg_repo_name(repo));
+	if (stat(filepath, &st) != -1) {
+		if (!got_meta && !force)
+			t = st.st_mtime;
+	}
 
 	if (t != 0) {
-		if (sqlite3_open(repofile, &sqlite) != SQLITE_OK) {
+		if (sqlite3_open(filepath, &sqlite) != SQLITE_OK) {
 			pkg_emit_error("Unable to open local database");
 			return (EPKG_FATAL);
 		}
@@ -459,17 +486,16 @@ pkg_repo_update_binary_pkgs(struct pkg_repo *repo, bool force)
 				sqlite3_close(sqlite);
 				sqlite = NULL;
 			}
-			unlink(repofile);
+			unlink(filepath);
 		}
 	}
 
-	res = pkg_repo_update_incremental(repofile, repo, &t);
+	res = pkg_repo_update_incremental(filepath, repo, &t);
 	if (res != EPKG_OK && res != EPKG_UPTODATE) {
 		pkg_emit_notice("Unable to find catalogs");
 		goto cleanup;
 	}
 
-	res = EPKG_OK;
 cleanup:
 	/* Set mtime from http request if possible */
 	if (t != 0) {
@@ -483,7 +509,11 @@ cleanup:
 			.tv_usec = 0
 			}
 		};
-		utimes(repofile, ftimes);
+
+		if (got_meta)
+			snprintf(filepath, sizeof(filepath), "%s/%s.meta", dbdir, pkg_repo_name(repo));
+
+		utimes(filepath, ftimes);
 	}
 
 	return (res);

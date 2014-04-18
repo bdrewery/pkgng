@@ -38,6 +38,7 @@
 
 #include <assert.h>
 #include <err.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -269,7 +270,7 @@ exec_help(int argc, char **argv)
 static void
 show_plugin_info(void)
 {
-	pkg_object		*conf;
+	const pkg_object	*conf;
 	struct pkg_plugin	*p = NULL;
 
 	while (pkg_plugins(&p) == EPKG_OK) {
@@ -434,13 +435,22 @@ start_process_worker(void)
 			if (child_pid == -1)
 				err(EX_OSERR, "Failed to fork worker process");
 
-			if (waitpid(child_pid, &status, WEXITED) == -1)
-				err(EX_OSERR, "Child process pid=%d", child_pid); 
+			while (waitpid(child_pid, &status, 0) == -1) {
+				if (errno != EINTR)
+					err(EX_OSERR, "Child process pid=%d", (int)child_pid);
+			}
 
 			ret = WEXITSTATUS(status);
 
 			if (WIFEXITED(status) && ret != EX_NEEDRESTART)
 				break;
+			if (WIFSIGNALED(status)) {
+				/* Process got some terminating signal, hence stop the loop */
+				fprintf(stderr, "Child process pid=%d terminated abnormally by signal: %d\n",
+						(int)child_pid, WTERMSIG(status));
+				ret = -(WTERMSIG(status));
+				break;
+			}
 		}
 	}
 
@@ -471,7 +481,7 @@ main(int argc, char **argv)
 	struct plugcmd *c;
 	const char *conffile = NULL;
 	const char *reposdir = NULL;
-	pkg_object *alias, *cur;
+	const pkg_object *alias, *cur;
 	pkg_iter it = NULL;
 	const char *alias_value;
 	char **newargv, *arg, *args;
