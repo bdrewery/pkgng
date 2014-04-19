@@ -856,7 +856,7 @@ pkg_init(const char *path, const char *reposdir)
 			break;
 		}
 		if (o != NULL) {
-			if (ncfg != NULL)
+			if (ncfg == NULL)
 				ncfg = ucl_object_typed_new(UCL_OBJECT);
 			ucl_object_insert_key(ncfg, o, key, strlen(key), true);
 		}
@@ -901,11 +901,6 @@ pkg_init(const char *path, const char *reposdir)
 	nsname = pkg_object_string(pkg_config_get("NAMESERVER"));
 	if (nsname != NULL)
 		set_nameserver(ucl_object_tostring_forced(o));
-
-	/* Set default case sensitivity for searching */
-	pkgdb_set_case_sensitivity(
-		pkg_object_bool(pkg_config_get("CASE_SENSITIVE_MATCH"))
-		);
 
 	return (EPKG_OK);
 }
