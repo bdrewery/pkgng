@@ -7,6 +7,7 @@
  * Copyright (c) 2012-2013 Matthew Seaman <matthew@FreeBSD.org>
  * Copyright (c) 2012 Bryan Drewery <bryan@shatow.net>
  * Copyright (c) 2013 Gerald Pfeifer <gerald@pfeifer.com>
+ * Copyright (c) 2013-2014 Vsevolod Stakhov <vsevolod@FreeBSD.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -72,7 +73,7 @@
 */
 
 #define DB_SCHEMA_MAJOR	0
-#define DB_SCHEMA_MINOR	22
+#define DB_SCHEMA_MINOR	23
 
 #define DBVERSION (DB_SCHEMA_MAJOR * 1000 + DB_SCHEMA_MINOR)
 
@@ -97,33 +98,38 @@ extern int sqlite3_shell(int, char**);
 static struct column_mapping {
 	const char * const name;
 	pkg_attr type;
+	enum {
+		PKG_SQLITE_STRING,
+		PKG_SQLITE_INT64,
+		PKG_SQLITE_BOOL
+	} pkg_type;
 } columns[] = {
-	{ "arch",	PKG_ARCH },
-	{ "automatic",	PKG_AUTOMATIC },
-	{ "cksum",	PKG_CKSUM },
-	{ "comment",	PKG_COMMENT },
-	{ "dbname",	PKG_REPONAME },
-	{ "desc",	PKG_DESC },
-	{ "flatsize",	PKG_FLATSIZE },
-	{ "id",		PKG_ROWID },
-	{ "licenselogic", PKG_LICENSE_LOGIC },
-	{ "locked",	PKG_LOCKED },
-	{ "maintainer",	PKG_MAINTAINER },
-	{ "manifestdigest",	PKG_DIGEST },
-	{ "message",	PKG_MESSAGE },
-	{ "name",	PKG_NAME },
-	{ "oldflatsize", PKG_OLD_FLATSIZE },
-	{ "oldversion",	PKG_OLD_VERSION },
-	{ "origin",	PKG_ORIGIN },
-	{ "pkgsize",	PKG_PKGSIZE },
-	{ "prefix",	PKG_PREFIX },
-	{ "repopath",	PKG_REPOPATH },
-	{ "rowid",	PKG_ROWID },
-	{ "time",	PKG_TIME },
-	{ "version",	PKG_VERSION },
-	{ "weight",	-1 },
-	{ "www",	PKG_WWW },
-	{ NULL,		-1 }
+	{ "arch",	PKG_ARCH, PKG_SQLITE_STRING },
+	{ "automatic",	PKG_AUTOMATIC, PKG_SQLITE_BOOL },
+	{ "cksum",	PKG_CKSUM, PKG_SQLITE_STRING },
+	{ "comment",	PKG_COMMENT, PKG_SQLITE_STRING },
+	{ "dbname",	PKG_REPONAME, PKG_SQLITE_STRING },
+	{ "desc",	PKG_DESC, PKG_SQLITE_STRING },
+	{ "flatsize",	PKG_FLATSIZE, PKG_SQLITE_INT64 },
+	{ "id",		PKG_ROWID, PKG_SQLITE_INT64 },
+	{ "licenselogic", PKG_LICENSE_LOGIC, PKG_SQLITE_INT64 },
+	{ "locked",	PKG_LOCKED, PKG_SQLITE_BOOL },
+	{ "maintainer",	PKG_MAINTAINER, PKG_SQLITE_STRING },
+	{ "manifestdigest",	PKG_DIGEST, PKG_SQLITE_STRING },
+	{ "message",	PKG_MESSAGE, PKG_SQLITE_STRING },
+	{ "name",	PKG_NAME, PKG_SQLITE_STRING },
+	{ "oldflatsize", PKG_OLD_FLATSIZE, PKG_SQLITE_INT64 },
+	{ "oldversion",	PKG_OLD_VERSION, PKG_SQLITE_STRING },
+	{ "origin",	PKG_ORIGIN, PKG_SQLITE_STRING },
+	{ "pkgsize",	PKG_PKGSIZE, PKG_SQLITE_INT64 },
+	{ "prefix",	PKG_PREFIX, PKG_SQLITE_STRING },
+	{ "repopath",	PKG_REPOPATH, PKG_SQLITE_STRING },
+	{ "rowid",	PKG_ROWID, PKG_SQLITE_INT64 },
+	{ "time",	PKG_TIME, PKG_SQLITE_INT64 },
+	{ "version",	PKG_VERSION, PKG_SQLITE_STRING },
+	{ "weight",	-1, PKG_SQLITE_INT64 },
+	{ "www",	PKG_WWW, PKG_SQLITE_STRING },
+	{ NULL,		-1, PKG_SQLITE_STRING }
 };
 
 static int
@@ -229,28 +235,39 @@ populate_pkg(sqlite3_stmt *stmt, struct pkg *pkg) {
 		case SQLITE_TEXT:
 			column = bsearch(colname, columns, NELEM(columns) - 1,
 					sizeof(columns[0]), compare_column_func);
-			if (column == NULL)
-				pkg_emit_error("Unknown column %s",
-				    colname);
-			else
-				pkg_set(pkg, column->type,
-						sqlite3_column_text(stmt,
-						icol));
+			if (column == NULL) {
+				pkg_emit_error("unknown column %s", colname);
+			}
+			else {
+				if (column->pkg_type == PKG_SQLITE_STRING)
+					pkg_set(pkg, column->type,
+						sqlite3_column_text(stmt, icol));
+				else
+					pkg_emit_error("want string for column %s and got number",
+							colname);
+			}
 			break;
 		case SQLITE_INTEGER:
 			column = bsearch(colname, columns, NELEM(columns) - 1,
 					sizeof(columns[0]), compare_column_func);
-			if (column == NULL)
-				pkg_emit_error("Unknown column %s",
-						colname);
-			else
-				pkg_set(pkg, column->type,
-						sqlite3_column_int64(stmt,
-						icol));
+			if (column == NULL) {
+				pkg_emit_error("Unknown column %s", colname);
+			}
+			else {
+				if (column->pkg_type == PKG_SQLITE_INT64)
+					pkg_set(pkg, column->type,
+						sqlite3_column_int64(stmt, icol));
+				else if (column->pkg_type == PKG_SQLITE_BOOL)
+					pkg_set(pkg, column->type,
+							(bool)sqlite3_column_int(stmt, icol));
+				else
+					pkg_emit_error("want number for column %s and got string",
+							colname);
+			}
 			break;
 		case SQLITE_BLOB:
 		case SQLITE_FLOAT:
-			pkg_emit_error("Wrong type for column: %s",
+			pkg_emit_error("wrong type for column: %s",
 			    colname);
 			/* just ignore currently */
 			break;
@@ -630,6 +647,10 @@ pkgdb_init(sqlite3 *sdb)
 	    "UNIQUE(package_id, provide_id)"
 	");"
 
+	/* FTS search table */
+
+	"CREATE VIRTUAL TABLE pkg_search USING fts4(id, name, origin);"
+
 	/* Mark the end of the array */
 
 	"CREATE INDEX deporigini on deps(origin);"
@@ -649,6 +670,8 @@ pkgdb_init(sqlite3 *sdb)
 	"CREATE INDEX pkg_conflicts_pid ON pkg_conflicts(package_id);"
 	"CREATE INDEX pkg_conflicts_cid ON pkg_conflicts(conflict_id);"
 	"CREATE INDEX pkg_provides_id ON pkg_provides(package_id);"
+	"CREATE INDEX packages_origin ON packages(origin COLLATE NOCASE);"
+	"CREATE INDEX packages_name ON packages(name COLLATE NOCASE);"
 
 	"CREATE VIEW pkg_shlibs AS SELECT * FROM pkg_shlibs_required;"
 	"CREATE TRIGGER pkg_shlibs_update "
@@ -1510,6 +1533,12 @@ pkgdb_get_pattern_query(const char *pattern, match_t match)
 	case MATCH_CONDITION:
 		comp = pattern;
 		break;
+	case MATCH_FTS:
+		if (checkorigin == NULL)
+			comp = " WHERE id IN (SELECT id FROM pkg_search WHERE name MATCH ?1)";
+		else
+			comp = " WHERE id IN (SELECT id FROM pkg_search WHERE origin MATCH ?1)";
+		break;
 	}
 
 	return (comp);
@@ -1539,6 +1568,9 @@ pkgdb_get_match_how(match_t match)
 	case MATCH_CONDITION:
 		/* Should not be called by pkgdb_get_match_how(). */
 		assert(0);
+		break;
+	case MATCH_FTS:
+		how = "id IN (SELECT id FROM pkg_search WHERE %s MATCH ?1)";
 		break;
 	}
 
@@ -2311,6 +2343,7 @@ typedef enum _sql_prstmt_index {
 	CONFLICT,
 	PKG_PROVIDE,
 	PROVIDE,
+	FTS_APPEND,
 	PRSTMT_LAST,
 } sql_prstmt_index;
 
@@ -2503,10 +2536,16 @@ static sql_prstmt sql_prepared_statements[PRSTMT_LAST] = {
 		"VALUES (?1, (SELECT id FROM provides WHERE provide = ?2))",
 		"IT",
 	},
-	{
+	[PROVIDE] = {
 		NULL,
 		"INSERT OR IGNORE INTO provides(provide) VALUES(?1)",
 		"T",
+	},
+	[FTS_APPEND] = {
+		NULL,
+		"INSERT OR ROLLBACK INTO pkg_search(id, name, origin) "
+		"VALUES (?1, ?2 || '-' || ?3, ?4);",
+		"ITTT"
 	}
 	/* PRSTMT_LAST */
 };
@@ -2615,8 +2654,7 @@ pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg, int complete, int forced)
 	const char		*digest;
 
 	bool			 automatic;
-	lic_t			 licenselogic;
-	int64_t			 flatsize;
+	int64_t			 flatsize, licenselogic;
 
 	const pkg_object	*licenses, *categories;
 
@@ -2675,6 +2713,11 @@ pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg, int complete, int forced)
 	}
 
 	package_id = sqlite3_last_insert_rowid(s);
+
+	if (run_prstmt(FTS_APPEND, package_id, name, version, origin) != SQLITE_DONE) {
+		ERROR_SQLITE(s);
+		goto cleanup;
+	}
 
 	/*
 	 * update dep informations on packages that depends on the insert
@@ -3896,7 +3939,8 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 {
 	int		 attr;
 	sqlite3_stmt	*stmt;
-	int64_t		 automatic, flatsize, locked;
+	int64_t		 flatsize;
+	bool automatic, locked;
 	char		*oldorigin;
 	char		*neworigin;
 
@@ -3932,7 +3976,7 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 			sqlite3_bind_int64(stmt, 2, id);
 			break;
 		case PKG_SET_AUTOMATIC:
-			automatic = (int64_t)va_arg(ap, int);
+			automatic = (bool)va_arg(ap, int);
 			if (automatic != 0 && automatic != 1) {
 				sqlite3_finalize(stmt);
 				continue;
@@ -3941,7 +3985,7 @@ pkgdb_vset(struct pkgdb *db, int64_t id, va_list ap)
 			sqlite3_bind_int64(stmt, 2, id);
 			break;
 		case PKG_SET_LOCKED:
-			locked = (int64_t)va_arg(ap, int);
+			locked = (bool)va_arg(ap, int);
 			if (locked != 0 && locked != 1)
 				continue;
 			sqlite3_bind_int64(stmt, 1, locked);
