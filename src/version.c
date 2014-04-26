@@ -71,6 +71,7 @@ print_version(struct pkg *pkg, const char *source, const char *ver,
 {
 	const char	*key;
 	const char	*version;
+	int		 cout;
 
 	pkg_get(pkg, PKG_VERSION, &version);
 	if (ver == NULL) {
@@ -103,8 +104,13 @@ print_version(struct pkg *pkg, const char *source, const char *ver,
 
 	if (opt & VERSION_ORIGIN)
 		pkg_printf("%-34o %S", pkg, key);
-	else
-		pkg_printf("%n-%v %S", pkg, pkg, key);
+	else {
+		cout = pkg_printf("%n-%v", pkg, pkg);
+		cout = 35 - cout;
+		if (cout < 1)
+			cout = 1;
+		printf("%*s%s", cout, " ", key);
+	}
 
 	if (opt & VERSION_VERBOSE) {
 		switch (*key) {
@@ -334,32 +340,45 @@ free_index(struct index_entry *indexhead)
 	return;
 }
 
-static int
-do_source_index(unsigned int opt, char limchar, char *pattern, match_t match,
-		int argc, char ** restrict argv, const char *matchorigin)
+static bool
+have_indexfile(const char **indexfile, char *filebuf, size_t filebuflen,
+	       int argc, char ** restrict argv)
 {
-	char			 filebuf[MAXPATHLEN];
-	struct index_entry	*indexhead;
-	struct index_entry	*entry;
-	struct pkgdb		*db = NULL;
-	struct pkgdb_it		*it = NULL;
-	struct pkg		*pkg = NULL;
-	const char		*indexfile;
-	const char		*origin;
-
-	if ( (opt & VERSION_SOURCES) != VERSION_SOURCE_INDEX || argc > 1 ) {
-		usage_version();
-		return (EX_USAGE);
-	}
+	bool		have_indexfile = true;
+	struct stat	sb;
 
 	/* If there is a remaining command line argument, take
 	   that as the name of the INDEX file to use.  Otherwise,
 	   search for INDEX-N within the ports tree */
 
 	if (argc == 0)
-		indexfile = indexfilename(filebuf, sizeof(filebuf));
+		*indexfile = indexfilename(filebuf, filebuflen);
 	else
-		indexfile = argv[0];
+		*indexfile = argv[0];
+
+	if (stat(*indexfile, &sb) == -1) {
+		have_indexfile = false;
+		warn("Can't access %s", *indexfile);
+	}
+	
+	return (have_indexfile);
+}
+
+static int
+do_source_index(unsigned int opt, char limchar, char *pattern, match_t match,
+	        const char *matchorigin, const char *indexfile)
+{
+	struct index_entry	*indexhead;
+	struct index_entry	*entry;
+	struct pkgdb		*db = NULL;
+	struct pkgdb_it		*it = NULL;
+	struct pkg		*pkg = NULL;
+	const char		*origin;
+
+	if ( (opt & VERSION_SOURCES) != VERSION_SOURCE_INDEX) {
+		usage_version();
+		return (EX_USAGE);
+	}
 
 	if (pkgdb_open(&db, PKGDB_DEFAULT) != EPKG_OK)
 		return (EX_IOERR);
@@ -645,6 +664,8 @@ exec_version(int argc, char **argv)
 	const char	*matchorigin = NULL;
 	const char	*reponame = NULL;
 	const char	*portsdir;
+	const char	*indexfile;
+	char		 filebuf[MAXPATHLEN];
 	bool		 auto_update;
 	match_t		 match = MATCH_ALL;
 	char		*pattern = NULL;
@@ -752,9 +773,19 @@ exec_version(int argc, char **argv)
 		}
 	}
 
-	if ( (opt & VERSION_SOURCE_INDEX) == VERSION_SOURCE_INDEX )
-		return (do_source_index(opt, limchar, pattern, match,
-			    argc, argv, matchorigin));
+	if (argc > 1) {
+		usage_version();
+		return (EX_USAGE);
+	}
+
+	if ( (opt & VERSION_SOURCE_INDEX) == VERSION_SOURCE_INDEX ) {
+		if (!have_indexfile(&indexfile, filebuf, sizeof(filebuf),
+                         argc, argv))
+			return (EX_SOFTWARE);
+		else
+			return (do_source_index(opt, limchar, pattern, match,
+				    matchorigin, indexfile));
+	}
 
 	if ( (opt & VERSION_SOURCE_REMOTE) == VERSION_SOURCE_REMOTE )
 		return (do_source_remote(opt, limchar, pattern, match,
@@ -768,10 +799,15 @@ exec_version(int argc, char **argv)
 				    match, matchorigin, portsdir));
 	}
 
-	/* If none of -IPR were specified, and portsdir exists use
-	   that, otherwise fallback to remote. */
+	/* If none of -IPR were specified, and INDEX exists use that.
+	   Failing that, if portsdir exists and is valid, use that
+	   (slow) otherwise fallback to remote. */
 
-	if (have_ports(&portsdir)) {
+	if (have_indexfile(&indexfile, filebuf, sizeof(filebuf), argc, argv)) {
+		opt |= VERSION_SOURCE_INDEX;
+		return (do_source_index(opt, limchar, pattern, match,
+			    matchorigin, indexfile));
+	} else if (have_ports(&portsdir)) {
 		opt |= VERSION_SOURCE_PORTS;
 		return (do_source_ports(opt, limchar, pattern, match,
 			    matchorigin, portsdir));
