@@ -996,6 +996,7 @@ int
 pkg_addshlib_required(struct pkg *pkg, const char *name)
 {
 	struct pkg_shlib *s = NULL;
+	const char *origin;
 
 	assert(pkg != NULL);
 	assert(name != NULL && name[0] != '\0');
@@ -1013,6 +1014,10 @@ pkg_addshlib_required(struct pkg *pkg, const char *name)
 	    pkg_shlib_name(s),
 	    strlen(pkg_shlib_name(s)), s);
 
+	pkg_get(pkg, PKG_ORIGIN, &origin);
+	pkg_debug(3, "added shlib deps for %s on %s",
+			origin, name);
+
 	return (EPKG_OK);
 }
 
@@ -1020,6 +1025,7 @@ int
 pkg_addshlib_provided(struct pkg *pkg, const char *name)
 {
 	struct pkg_shlib *s = NULL;
+	const char *origin;
 
 	assert(pkg != NULL);
 	assert(name != NULL && name[0] != '\0');
@@ -1036,6 +1042,10 @@ pkg_addshlib_provided(struct pkg *pkg, const char *name)
 	HASH_ADD_KEYPTR(hh, pkg->shlibs_provided,
 	    pkg_shlib_name(s),
 	    strlen(pkg_shlib_name(s)), s);
+
+	pkg_get(pkg, PKG_ORIGIN, &origin);
+	pkg_debug(3, "added shlib provide %s for %s",
+			name, origin);
 
 	return (EPKG_OK);
 }
