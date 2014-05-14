@@ -715,9 +715,9 @@ apply_repo_change(struct pkgdb *db, const char *database,
 		  int version, int *next_version)
 {
 	const struct repo_changes	*change;
-	bool			 found = false;
+	bool			 found = false, in_trans = false;
 	int			 ret = EPKG_OK;
-	char			 sql[BUFSIZ];
+	char			 sql[8192];
 	char			*errmsg;
 
 	for (change = repo_changes; change->version != -1; change++) {
@@ -738,8 +738,10 @@ apply_repo_change(struct pkgdb *db, const char *database,
 	ret = substitute_into_sql(sql, sizeof(sql), change->sql, database);
 
 	/* begin transaction */
-	if (ret == EPKG_OK)
+	if (ret == EPKG_OK) {
+		in_trans = true;
 		ret = pkgdb_transaction_begin(db->sqlite, "SCHEMA");
+	}
 
 	/* apply change */
 	if (ret == EPKG_OK) {
@@ -758,10 +760,13 @@ apply_repo_change(struct pkgdb *db, const char *database,
 	}
 
 	/* commit or rollback */
-	if (ret == EPKG_OK)
-		ret = pkgdb_transaction_commit(db->sqlite, "SCHEMA");
-	else
-		pkgdb_transaction_rollback(db->sqlite, "SCHEMA");
+	if (in_trans) {
+		if (ret != EPKG_OK)
+			pkgdb_transaction_rollback(db->sqlite, "SCHEMA");
+
+		if (pkgdb_transaction_commit(db->sqlite, "SCHEMA") != EPKG_OK)
+			ret = EPKG_FATAL;
+	}
 
 	if (ret == EPKG_OK) {
 		pkg_emit_notice("Repo \"%s\" %s schema %d to %d: %s",
@@ -782,12 +787,12 @@ upgrade_repo_schema(struct pkgdb *db, const char *database, int current_version)
 	for (version = current_version;
 	     version < REPO_SCHEMA_VERSION;
 	     version = next_version)  {
-		pkg_debug(1, "Upgrading repo database schema from %d to %d",
-		    version, next_version);
 		ret = apply_repo_change(db, database, repo_upgrades,
 					"upgrade", version, &next_version);
 		if (ret != EPKG_OK)
 			break;
+		pkg_debug(1, "Upgrading repo database schema from %d to %d",
+				version, next_version);
 	}
 	return (ret);
 }
@@ -802,12 +807,13 @@ downgrade_repo_schema(struct pkgdb *db, const char *database, int current_versio
 	for (version = current_version;
 	     version > REPO_SCHEMA_VERSION;
 	     version = next_version)  {
-		pkg_debug(1, "Downgrading repo database schema from %d to %d",
-		    version, next_version);
+
 		ret = apply_repo_change(db, database, repo_downgrades,
 					"downgrade", version, &next_version);
 		if (ret != EPKG_OK)
 			break;
+		pkg_debug(1, "Downgrading repo database schema from %d to %d",
+				version, next_version);
 	}
 	return (ret);
 }
