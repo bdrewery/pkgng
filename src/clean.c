@@ -222,7 +222,7 @@ exec_clean(int argc, char **argv)
 	if (pkgdb_open(&db, PKGDB_REMOTE) != EPKG_OK)
 		return (EX_IOERR);
 
-	if (pkgdb_obtain_lock(db, PKGDB_LOCK_READONLY, 0, 0) != EPKG_OK) {
+	if (pkgdb_obtain_lock(db, PKGDB_LOCK_READONLY) != EPKG_OK) {
 		pkgdb_close(db);
 		warnx("Cannot get a read lock on a database, it is locked by another process");
 		return (EX_TEMPFAIL);
@@ -256,9 +256,6 @@ exec_clean(int argc, char **argv)
 				s->sum[slen] = '\0';
 				HASH_ADD_STR(sumlist, sum, s);
 			}
-			pkgdb_it_free(it);
-			pkgdb_release_lock(db, PKGDB_LOCK_READONLY);
-			pkgdb_close(db);
 		}
 
 		s = NULL;
@@ -295,6 +292,8 @@ exec_clean(int argc, char **argv)
 		retcode = EX_OK;
 
 cleanup:
+	pkgdb_release_lock(db, PKGDB_LOCK_READONLY);
+	pkgdb_close(db);
 	pkg_manifest_keys_free(keys);
 	free_dellist(&dl);
 

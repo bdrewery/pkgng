@@ -190,7 +190,7 @@ exec_install(int argc, char **argv)
 	    reponame) != EPKG_OK)
 		return (EX_IOERR);
 
-	if (pkgdb_obtain_lock(db, lock_type, 0, 0) != EPKG_OK) {
+	if (pkgdb_obtain_lock(db, lock_type) != EPKG_OK) {
 		pkgdb_close(db);
 		warnx("Cannot get an advisory lock on a database, it is locked by another process");
 		return (EX_TEMPFAIL);
@@ -229,8 +229,9 @@ exec_install(int argc, char **argv)
 		if (yes) {
 			retcode = pkg_jobs_apply(jobs);
 			if (retcode == EPKG_CONFLICT) {
-				printf ("The conflicts with the existing packages have been found.\n"
-						"We need to run one more solver iteration to resolve them.\n");
+				printf("Conflicts with the existing packages "
+				    "have been found.\nOne more solver "
+				    "iteration is needed to resolve them.\n");
 				continue;
 			}
 			else if (retcode != EPKG_OK)

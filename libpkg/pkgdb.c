@@ -4174,13 +4174,16 @@ pkgdb_check_lock_pid(struct pkgdb *db)
 		pid = sqlite3_column_int64(stmt, 0);
 		if (pid != lpid) {
 			if (kill((pid_t)pid, 0) == -1) {
-				pkg_debug(1, "found stale pid %lld in lock database", pid);
+				pkg_debug(1, "found stale pid %lld in lock database, my pid is: %lld",
+						(long long)pid, (long long)lpid);
 				if (pkgdb_remove_lock_pid(db, pid) != EPKG_OK){
 					sqlite3_finalize(stmt);
 					return (EPKG_FATAL);
 				}
 			}
 			else {
+				pkg_emit_notice("process with pid %lld still holds the lock",
+						(long long int)pid);
 				found ++;
 			}
 		}
@@ -4208,15 +4211,24 @@ pkgdb_reset_lock(struct pkgdb *db)
 }
 
 static int
-pkgdb_try_lock(struct pkgdb *db, const char *lock_sql,
-		double delay, unsigned int retries, pkgdb_lock_t type,
+pkgdb_try_lock(struct pkgdb *db, const char *lock_sql, pkgdb_lock_t type,
 		bool upgrade)
 {
 	unsigned int tries = 0;
 	struct timespec ts;
 	int ret = EPKG_END;
+	const pkg_object *timeout, *max_tries;
+	int64_t num_timeout = 1, num_maxtries = 1;
 
-	while (tries <= retries) {
+	timeout = pkg_config_get("LOCK_WAIT");
+	max_tries = pkg_config_get("LOCK_RETRIES");
+
+	if (timeout)
+		num_timeout = pkg_object_int(timeout);
+	if (max_tries)
+		num_maxtries = pkg_object_int(max_tries);
+
+	while (tries <= num_maxtries) {
 		ret = sqlite3_exec(db->sqlite, lock_sql, NULL, NULL, NULL);
 		if (ret != SQLITE_OK) {
 			if (ret == SQLITE_READONLY && type == PKGDB_LOCK_READONLY) {
@@ -4238,15 +4250,16 @@ pkgdb_try_lock(struct pkgdb *db, const char *lock_sql,
 					 * In case of upgrade we should obtain a lock from the beginning,
 					 * hence switch upgrade to retain
 					 */
-					return pkgdb_obtain_lock(db, type, delay, retries - tries);
+					pkgdb_remove_lock_pid(db, (int64_t)getpid());
+					return pkgdb_obtain_lock(db, type);
 				}
 				continue;
 			}
-			else if (delay > 0) {
-				ts.tv_sec = (int)delay;
-				ts.tv_nsec = (delay - (int)delay) * 1000000000.;
+			else if (num_timeout > 0) {
+				ts.tv_sec = (int)num_timeout;
+				ts.tv_nsec = (num_timeout - (int)num_timeout) * 1000000000.;
 				pkg_debug(1, "waiting for database lock for %d times, "
-						"next try in %.2f seconds", tries, delay);
+						"next try in %.2f seconds", tries, num_timeout);
 				(void)nanosleep(&ts, NULL);
 			}
 			else {
@@ -4268,8 +4281,7 @@ pkgdb_try_lock(struct pkgdb *db, const char *lock_sql,
 }
 
 int
-pkgdb_obtain_lock(struct pkgdb *db, pkgdb_lock_t type,
-		double delay, unsigned int retries)
+pkgdb_obtain_lock(struct pkgdb *db, pkgdb_lock_t type)
 {
 	int ret;
 	const char table_sql[] = ""
@@ -4321,14 +4333,13 @@ pkgdb_obtain_lock(struct pkgdb *db, pkgdb_lock_t type,
 		break;
 	}
 
-	ret = pkgdb_try_lock(db, lock_sql, delay, retries, type, false);
+	ret = pkgdb_try_lock(db, lock_sql, type, false);
 
 	return (ret);
 }
 
 int
-pkgdb_upgrade_lock(struct pkgdb *db, pkgdb_lock_t old_type, pkgdb_lock_t new_type,
-		double delay, unsigned int retries)
+pkgdb_upgrade_lock(struct pkgdb *db, pkgdb_lock_t old_type, pkgdb_lock_t new_type)
 {
 	const char advisory_exclusive_lock_sql[] = ""
 		"UPDATE pkg_lock SET exclusive=1,advisory=1 WHERE exclusive=0 AND advisory=1 AND read=0;";
@@ -4338,7 +4349,7 @@ pkgdb_upgrade_lock(struct pkgdb *db, pkgdb_lock_t old_type, pkgdb_lock_t new_typ
 
 	if (old_type == PKGDB_LOCK_ADVISORY && new_type == PKGDB_LOCK_EXCLUSIVE) {
 		pkg_debug(1, "want to upgrade advisory to exclusive lock");
-		ret = pkgdb_try_lock(db, advisory_exclusive_lock_sql, delay, retries,
+		ret = pkgdb_try_lock(db, advisory_exclusive_lock_sql,
 				new_type, true);
 	}
 
