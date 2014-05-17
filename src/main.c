@@ -45,6 +45,7 @@
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
+#include <getopt.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -649,6 +650,21 @@ main(int argc, char **argv)
 	int		  newargvl;
 	int		  j;
 
+	struct option longopts[] = {
+		{ "debug",		no_argument,		NULL,	'd' },
+#ifdef HAVE_LIBJAIL
+		{ "jail",		required_argument,	NULL,	'j' },
+#endif
+		{ "chroot",		required_argument,	NULL,	'c' },
+		{ "config",		required_argument,	NULL,	'C' },
+		{ "repo-conf-dir",	required_argument,	NULL,	'R' },
+		{ "list",		no_argument,		NULL,	'l' },
+		{ "check-activation",	no_argument,		NULL,	'N' },
+		{ "version",		no_argument,		NULL,	'v' },
+		{ "option",		required_argument,	NULL,	'o' },
+		{ NULL,			0,			NULL,	0   },
+	};
+
 	/* Set stdout unbuffered */
 	setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -657,10 +673,19 @@ main(int argc, char **argv)
 	if (argc < 2)
 		usage(NULL, NULL, stderr, PKG_USAGE_INVALID_ARGUMENTS, "not enough arguments");
 
+	/* getopt_long() will permute the arg-list unless
+	 * POSIXLY_CORRECT is set in the environment.  This is a
+	 * difference to the original getopt() we were using, and
+	 * screws up our 'pkg {pkg-opts} verb {verb-opts}' command
+	 * line concept. */
+
+	if (setenv("POSIXLY_CORRECT", "1",  1) == -1)
+		err(EX_SOFTWARE, "setenv() failed");
+
 #ifdef HAVE_LIBJAIL
-	while ((ch = getopt(argc, argv, "dj:c:C:R:lNvqo:")) != -1) {
+	while ((ch = getopt_long(argc, argv, "dj:c:C:R:lNvo:", longopts, NULL)) != -1) {
 #else
-	while ((ch = getopt(argc, argv, "dc:C:R:lNvqo:")) != -1) {
+	while ((ch = getopt_long(argc, argv, "dc:C:R:lNvo:", longopts, NULL)) != -1) {
 #endif
 		switch (ch) {
 		case 'd':
