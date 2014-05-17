@@ -638,7 +638,7 @@ int pkg_provides(const struct pkg *pkg, struct pkg_provide **provide);
  * dependency list contains all applicable packages providing the
  * shared objects used by pkg.
  * Also add all the shared object into the shlibs.
- * It respects the SHLIBS and AUTODEPS options from configuration
+ * It respects the SHLIBS options from configuration
  * @return An error code
  */
 
@@ -1066,7 +1066,7 @@ struct pkgdb_it * pkgdb_rquery_provide(struct pkgdb *db,
 
 /**
  * Add/Modify/Delete an annotation for a package
- * @param key -- tag for the annotation
+ * @param tag -- tag for the annotation
  * @param value -- text of the annotation
  * @return An error code
  */
@@ -1241,6 +1241,13 @@ typedef enum pkg_formats { TAR, TGZ, TBZ, TXZ } pkg_formats;
  * Create package from an installed & registered package
  */
 int pkg_create_installed(const char *, pkg_formats, struct pkg *);
+
+/**
+ * Create package from stage install using just the manifest --
+ * no old pkg_tools compatibility stuff
+ */
+int pkg_create_from_manifest(const char *, pkg_formats, const char *,
+			     const char *, bool);
 
 /**
  * Create package from stage install with a metadata directory

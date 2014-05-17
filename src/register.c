@@ -2,7 +2,7 @@
  * Copyright (c) 2011-2014 Baptiste Daroussin <bapt@FreeBSD.org>
  * Copyright (c) 2011-2012 Julien Laffaye <jlaffaye@FreeBSD.org>
  * Copyright (c) 2011-2012 Marin Atanasov Nikolov <dnaeon@gmail.com>
- * Copyright (c) 2013 Matthew Seaman <matthew@FreeBSD.org>
+ * Copyright (c) 2013-2014 Matthew Seaman <matthew@FreeBSD.org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -114,14 +114,15 @@ exec_register(int argc, char **argv)
 	/* options descriptor */
 	struct option longopts[] = {
 		{ "automatic",	no_argument,		NULL,	'A' },
-		{ "plist",	required_argument,	NULL,	'f' },
-		{ "root",	required_argument,	NULL,	'i' },
+		{ "debug",      no_argument,		NULL,	'd' },
 		{ "legacy",	no_argument,		NULL,	'l' },
 		{ "manifest",	required_argument,	NULL,	'M' },
 		{ "metadata",	required_argument,	NULL,	'm' },
 		{ "old",	no_argument,		NULL,	'O' },
-		{ "test",	no_argument,		NULL,	't' },
+		{ "plist",	required_argument,	NULL,	'f' },
 		{ "relocate",	required_argument,	NULL, 	1 },
+		{ "root",	required_argument,	NULL,	'i' },
+		{ "test",	no_argument,		NULL,	't' },
 		{ NULL,		0,			NULL,	0},
 	};
 

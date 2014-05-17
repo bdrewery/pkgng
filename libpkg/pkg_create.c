@@ -1,6 +1,7 @@
 /*-
  * Copyright (c) 2011-2013 Baptiste Daroussin <bapt@FreeBSD.org>
  * Copyright (c) 2011-2012 Julien Laffaye <jlaffaye@FreeBSD.org>
+ * Copyright (c) 2014 Matthew Seaman <matthew@FreeBSD.org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -74,22 +75,36 @@ pkg_create_from_dir(struct pkg *pkg, const char *root,
 		snprintf(fpath, sizeof(fpath), "%s%s%s", root ? root : "",
 		    obj ? pkg_object_string(obj) : "", pkg_path);
 
-		if (lstat(fpath, &st) != 0 || S_ISLNK(st.st_mode))
-			continue;
-
+		if (lstat(fpath, &st) == -1) {
+			pkg_emit_errno("pkg_create_from_dir", "lstat failed");
+			return (EPKG_FATAL);
+		}
 		if (file->size == 0)
 			file->size = (int64_t)st.st_size;
 		flatsize += file->size;
 
-		if (pkg_sum == NULL || pkg_sum[0] == '\0') {
-			if (pkg->type == PKG_OLD_FILE) {
-				if (md5_file(fpath, sha256) != EPKG_OK)
-					return (EPKG_FATAL);
-			} else {
-				if (sha256_file(fpath, sha256) != EPKG_OK)
-					return (EPKG_FATAL);
+		if (S_ISLNK(st.st_mode)) {
+			char linkbuf[MAXPATHLEN];
+			if ((ret = readlink(fpath, linkbuf, sizeof(linkbuf))) == -1) {
+				pkg_emit_errno("pkg_create_from_dir", "readlink failed");
+				return (EPKG_FATAL);
 			}
-			strlcpy(file->sum, sha256, sizeof(file->sum));
+			if (pkg_sum == NULL || pkg_sum[0] == '\0') {
+				sha256_buf(linkbuf, ret, sha256);
+				strlcpy(file->sum, sha256, sizeof(file->sum));
+			}
+		}
+		else {
+			if (pkg_sum == NULL || pkg_sum[0] == '\0') {
+				if (pkg->type == PKG_OLD_FILE) {
+					if (md5_file(fpath, sha256) != EPKG_OK)
+						return (EPKG_FATAL);
+				} else {
+					if (sha256_file(fpath, sha256) != EPKG_OK)
+						return (EPKG_FATAL);
+				}
+				strlcpy(file->sum, sha256, sizeof(file->sum));
+			}
 		}
 	}
 	pkg_set(pkg, PKG_FLATSIZE, flatsize);
@@ -210,6 +225,58 @@ static const char * const scripts[] = {
 	"pkg-post-upgrade",
 	NULL
 };
+
+
+/* The "no concessions to old pkg_tools" variant: just get everything
+ * from the manifest */
+int
+pkg_create_from_manifest(const char *outdir, pkg_formats format,
+			 const char *rootdir, const char *manifest, bool old)
+{
+	struct pkg	*pkg = NULL;
+	struct packing	*pkg_archive = NULL;
+	char		 arch[BUFSIZ];
+	int		 ret = ENOMEM;
+	char		*buf;
+	struct pkg_manifest_key *keys = NULL;
+
+	pkg_debug(1, "Creating package from stage directory: '%s'", rootdir);
+
+	if(pkg_new(&pkg, old ? PKG_OLD_FILE : PKG_FILE) != EPKG_OK) {
+		ret = EPKG_FATAL;
+		goto cleanup;
+	}
+
+	pkg_manifest_keys_new(&keys);
+	if ((ret = pkg_parse_manifest_file(pkg, manifest, keys)) != EPKG_OK) {
+		ret = EPKG_FATAL;
+		goto cleanup;
+	}
+
+	/* if no arch autodetermine it */
+	pkg_get(pkg, PKG_ARCH, &buf);
+	if (buf == NULL) {
+		pkg_get_myarch(arch, BUFSIZ);
+		pkg_set(pkg, PKG_ARCH, arch);
+	}
+
+	/* Create the archive */
+	pkg_archive = pkg_create_archive(outdir, pkg, format, 0);
+	if (pkg_archive == NULL) {
+		ret = EPKG_FATAL; /* XXX do better */
+		goto cleanup;
+	}
+
+	pkg_create_from_dir(pkg, rootdir, pkg_archive);
+	ret = EPKG_OK;
+
+cleanup:
+	free(pkg);
+	pkg_manifest_keys_free(keys);
+	if (ret == EPKG_OK)
+		ret = packing_finish(pkg_archive);
+	return (ret);
+}
 
 int
 pkg_create_staged(const char *outdir, pkg_formats format, const char *rootdir,
@@ -355,7 +422,7 @@ cleanup:
 	pkg_manifest_keys_free(keys);
 	if (ret == EPKG_OK)
 		ret = packing_finish(pkg_archive);
-	return ret;
+	return (ret);
 }
 
 int
